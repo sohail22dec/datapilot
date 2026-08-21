@@ -143,6 +143,7 @@ export default function Home() {
         columns: data?.columns,
         rowCount: data?.row_count,
         executionTimeMs: data?.execution_time_ms,
+        chartConfig: data?.chart_config,
       };
 
       setConversations((prev) =>

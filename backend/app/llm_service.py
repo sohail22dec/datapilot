@@ -7,7 +7,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.config import settings
 from app.database import get_database_schema, execute_read_only_query
-from app.schemas import GeneratedSQL, ChatResponse
+from app.schemas import GeneratedSQL, ChatResponse, ChartConfig
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,8 @@ Rules for SQL generation:
 4. Always provide clear, clean column aliases for aggregations (e.g. `SUM(oi.quantity * oi.unit_price) AS total_spend`, `COUNT(o.order_id) AS order_count`).
 5. For date filtering, use standard PostgreSQL functions (e.g. `DATE_TRUNC('month', order_date)`, `NOW() - INTERVAL '30 days'`).
 6. Apply `LIMIT 100` if the query could return an unbound list of rows.
-7. Return ONLY the structured output with valid SQL query, thought process, and tables used.
+7. Always use `LOWER()` or `ILIKE` when filtering text/status/segment columns (e.g. `LOWER(c.customer_segment) = 'vip'`, `LOWER(o.status) = 'completed'`, `LOWER(p.payment_status) = 'successful'`) to avoid case-mismatch issues.
+8. Return ONLY the structured output with valid SQL query, thought process, and tables used.
 """
 
 SQL_HEALING_SYSTEM_PROMPT = """You are a senior PostgreSQL database debugger.
@@ -63,7 +64,7 @@ Query Result Rows:
 
 Instructions:
 1. Provide a direct, professional, executive-level answer to the user's question based on the query results.
-2. Format key monetary figures, metrics, percentages, counts, and top entities in **bold** (e.g. **$45,200**, **18.5%**, **3,420 orders**, **Acme Corp**).
+2. Format all monetary values in Indian Rupees (₹) with proper comma separators, and metrics, percentages, counts, and top entities in **bold** (e.g. **₹45,200**, **₹1,24,500**, **18.5%**, **3,420 orders**).
 3. If multiple rows exist, summarize the key findings or top performers clearly, using concise bullet points if helpful.
 4. If no rows were returned, politely mention that no matching records were found in the database.
 5. Keep the tone concise, helpful, and analytical. Do not explain the SQL code itself in this summary.
@@ -99,8 +100,79 @@ def sanitize_row_values(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 clean_row[k] = v.isoformat()
             else:
                 clean_row[k] = v
+        
+        # Combine customer first_name and last_name for chart labels if available
+        if "first_name" in clean_row and "last_name" in clean_row and "name" not in clean_row:
+            clean_row["customer_name"] = f"{clean_row['first_name']} {clean_row['last_name']}"
+
         sanitized.append(clean_row)
     return sanitized
+
+
+def determine_chart_config(
+    user_question: str,
+    sql_query: str,
+    rows: List[Dict[str, Any]],
+    columns: List[str]
+) -> Optional[ChartConfig]:
+    """
+    Intelligently determines whether a query's result warrants a chart visualization
+    and chooses the optimal chart type (bar, line, area, or donut) with x/y keys.
+    """
+    if len(rows) < 2 or not columns or len(columns) < 2:
+        return None
+
+    first_row = rows[0]
+    
+    # Identify numeric candidate columns
+    numeric_cols = [
+        col for col in columns
+        if isinstance(first_row.get(col), (int, float)) and not col.endswith("_id")
+    ]
+    # Identify categorical / label candidate columns
+    categorical_cols = [
+        col for col in columns
+        if col not in numeric_cols and not col.endswith("_id")
+    ]
+
+    # If first_name + last_name were combined into customer_name
+    if "customer_name" in first_row and "customer_name" not in categorical_cols:
+        categorical_cols.insert(0, "customer_name")
+
+    if not numeric_cols:
+        return None
+
+    y_key = numeric_cols[0]
+    x_key = categorical_cols[0] if categorical_cols else columns[0]
+
+    q_lower = user_question.lower()
+    x_lower = x_key.lower()
+
+    # Donut / Pie Chart: distribution / shares with 8 or fewer slices
+    donut_indicators = [
+        "payment_method", "method", "status", "segment", "customer_segment",
+        "share", "distribution", "breakdown", "split", "reason"
+    ]
+    if any(k in x_lower or k in q_lower for k in donut_indicators) and len(rows) <= 8:
+        title = f"{x_key.replace('_', ' ').title()} Breakdown"
+        return ChartConfig(type="donut", x_key=x_key, y_key=y_key, title=title)
+
+    # Line / Area Chart: date / time-series trends
+    date_indicators = [
+        "date", "month", "day", "week", "year", "created_at", "order_date",
+        "signup_date", "payment_date"
+    ]
+    time_query_indicators = ["trend", "daily", "monthly", "over time", "growth"]
+    if any(k in x_lower for k in date_indicators) or any(k in q_lower for k in time_query_indicators):
+        title = f"{y_key.replace('_', ' ').title()} Trend"
+        return ChartConfig(type="area", x_key=x_key, y_key=y_key, title=title)
+
+    # Default: Bar Chart for rankings, categories, products, top spenders, cities
+    clean_y_label = y_key.replace("_", " ").title()
+    clean_x_label = x_key.replace("_", " ").title()
+    title = f"{clean_y_label} by {clean_x_label}"
+
+    return ChartConfig(type="bar", x_key=x_key, y_key=y_key, title=title)
 
 
 def generate_sql(user_question: str, schema_context: str) -> GeneratedSQL:
@@ -138,7 +210,7 @@ def synthesize_data_response(
     sql_query: str,
     rows: List[Dict[str, Any]]
 ) -> str:
-    """Synthesizes executive natural language answer from database query results."""
+    """Synthesizes executive natural language answer from database query results in INR (₹)."""
     display_rows = rows[:50]
     prompt = ANSWER_SYNTHESIS_PROMPT.format(
         user_question=user_question,
@@ -156,8 +228,8 @@ def process_chat_query(user_question: str) -> ChatResponse:
     1. Schema Introspection
     2. Text-to-SQL Generation
     3. Safe Read-Only Execution with Self-Healing
-    4. Answer Synthesis
-    5. Return Rich Payload
+    4. Answer Synthesis & Intelligent Chart Detection
+    5. Return Rich Payload with ChartConfig
     """
     # 1. Fetch live or cached schema
     schema_context = get_database_schema()
@@ -230,7 +302,15 @@ def process_chat_query(user_question: str) -> ChatResponse:
         logger.error(f"Answer synthesis failed: {e}")
         summary_text = f"Retrieved {query_result['row_count']} rows successfully from database."
 
-    # 5. Return complete rich payload
+    # 5. Determine chart visualization configuration
+    chart_config = determine_chart_config(
+        user_question=user_question,
+        sql_query=query_result["sql"],
+        rows=sanitized_rows,
+        columns=query_result["columns"],
+    )
+
+    # 6. Return complete rich payload
     return ChatResponse(
         response=summary_text,
         sql=query_result["sql"],
@@ -238,5 +318,6 @@ def process_chat_query(user_question: str) -> ChatResponse:
         columns=query_result["columns"],
         row_count=query_result["row_count"],
         execution_time_ms=query_result["execution_time_ms"],
+        chart_config=chart_config,
         model=settings.GEMINI_MODEL,
     )

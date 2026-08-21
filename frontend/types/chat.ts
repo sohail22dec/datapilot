@@ -4,6 +4,15 @@ export interface QueryDataRow {
   [key: string]: string | number | boolean | null | undefined;
 }
 
+export type ChartType = "bar" | "line" | "area" | "donut";
+
+export interface ChartConfig {
+  type: ChartType | null;
+  x_key?: string;
+  y_key?: string;
+  title?: string;
+}
+
 export interface Message {
   id: string;
   role: MessageRole;
@@ -14,6 +23,7 @@ export interface Message {
   columns?: string[];
   rowCount?: number;
   executionTimeMs?: number;
+  chartConfig?: ChartConfig | null;
 }
 
 export interface Conversation {

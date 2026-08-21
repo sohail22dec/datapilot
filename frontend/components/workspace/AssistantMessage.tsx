@@ -1,9 +1,19 @@
 "use client";
 
 import React, { useState } from "react";
-import { Code2, ChevronDown, ChevronUp, Copy, Check, Table, Zap } from "lucide-react";
+import {
+  Code2,
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  Check,
+  Table,
+  BarChart3,
+  Zap,
+} from "lucide-react";
 import { DataPilotIcon } from "../brand/DataPilotLogo";
-import { QueryDataRow } from "../../types/chat";
+import { DataChart } from "./DataChart";
+import { ChartConfig, QueryDataRow } from "../../types/chat";
 
 interface AssistantMessageProps {
   content: string | any;
@@ -13,6 +23,7 @@ interface AssistantMessageProps {
   columns?: string[];
   rowCount?: number;
   executionTimeMs?: number;
+  chartConfig?: ChartConfig | null;
 }
 
 export const AssistantMessage: React.FC<AssistantMessageProps> = ({
@@ -23,9 +34,14 @@ export const AssistantMessage: React.FC<AssistantMessageProps> = ({
   columns,
   rowCount,
   executionTimeMs,
+  chartConfig,
 }) => {
+  const hasData = Array.isArray(data) && data.length > 0;
+  const hasChart = Boolean(chartConfig && chartConfig.type && hasData && data!.length >= 2);
+
+  const [isChartOpen, setIsChartOpen] = useState<boolean>(hasChart);
+  const [isTableOpen, setIsTableOpen] = useState<boolean>(!hasChart && hasData);
   const [isSqlOpen, setIsSqlOpen] = useState<boolean>(false);
-  const [isTableOpen, setIsTableOpen] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
 
   const handleCopySql = async (e: React.MouseEvent) => {
@@ -91,8 +107,8 @@ export const AssistantMessage: React.FC<AssistantMessageProps> = ({
     });
   };
 
-  const hasData = Array.isArray(data) && data.length > 0;
-  const tableColumns = columns && columns.length > 0 ? columns : hasData ? Object.keys(data![0]) : [];
+  const tableColumns =
+    columns && columns.length > 0 ? columns : hasData ? Object.keys(data![0]) : [];
 
   return (
     <div className="flex items-start justify-start gap-3 my-4 w-full">
@@ -104,19 +120,67 @@ export const AssistantMessage: React.FC<AssistantMessageProps> = ({
       {/* Softer Dark Response Card */}
       <div className="bg-[#242834] border border-[#323849] rounded-2xl rounded-tl-xs px-5 py-4 max-w-[720px] w-full shadow-sm flex flex-col gap-3.5">
         {/* Main Text Content */}
-        <div className="select-text">
-          {renderFormattedContent(content)}
-        </div>
+        <div className="select-text">{renderFormattedContent(content)}</div>
 
-        {/* Action Pills Bar (SQL Toggle & Table Toggle) */}
-        {(sql || hasData) && (
+        {/* Action Pills Bar (Chart Toggle, Table Toggle, SQL Toggle) */}
+        {(hasChart || hasData || sql) && (
           <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-[#323849]/60">
+            {/* Chart View Toggle */}
+            {hasChart && (
+              <button
+                type="button"
+                onClick={() => setIsChartOpen(!isChartOpen)}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border transition-colors cursor-pointer ${
+                  isChartOpen
+                    ? "bg-[#383115] border-[#FEC50B]/50 text-white"
+                    : "bg-[#1E222B] hover:bg-[#282E3A] border-[#323849] text-[#CBD5E1] hover:text-white"
+                }`}
+              >
+                <BarChart3 className="w-3.5 h-3.5 text-[#FEC50B]" />
+                <span>{isChartOpen ? "Hide Chart" : "Chart View"}</span>
+                {isChartOpen ? (
+                  <ChevronUp className="w-3 h-3 text-[#94A3B8]" />
+                ) : (
+                  <ChevronDown className="w-3 h-3 text-[#94A3B8]" />
+                )}
+              </button>
+            )}
+
+            {/* View Data Table Toggle */}
+            {hasData && (
+              <button
+                type="button"
+                onClick={() => setIsTableOpen(!isTableOpen)}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border transition-colors cursor-pointer ${
+                  isTableOpen
+                    ? "bg-[#383115] border-[#FEC50B]/50 text-white"
+                    : "bg-[#1E222B] hover:bg-[#282E3A] border-[#323849] text-[#CBD5E1] hover:text-white"
+                }`}
+              >
+                <Table className="w-3.5 h-3.5 text-[#FEC50B]" />
+                <span>
+                  {isTableOpen
+                    ? "Hide Table"
+                    : `Data Table (${rowCount ?? data!.length})`}
+                </span>
+                {isTableOpen ? (
+                  <ChevronUp className="w-3 h-3 text-[#94A3B8]" />
+                ) : (
+                  <ChevronDown className="w-3 h-3 text-[#94A3B8]" />
+                )}
+              </button>
+            )}
+
             {/* View SQL Toggle */}
             {sql && (
               <button
                 type="button"
                 onClick={() => setIsSqlOpen(!isSqlOpen)}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-[#1E222B] hover:bg-[#282E3A] border border-[#323849] text-[#CBD5E1] hover:text-white transition-colors cursor-pointer"
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border transition-colors cursor-pointer ${
+                  isSqlOpen
+                    ? "bg-[#383115] border-[#FEC50B]/50 text-white"
+                    : "bg-[#1E222B] hover:bg-[#282E3A] border-[#323849] text-[#CBD5E1] hover:text-white"
+                }`}
               >
                 <Code2 className="w-3.5 h-3.5 text-[#FEC50B]" />
                 <span>{isSqlOpen ? "Hide SQL" : "View SQL"}</span>
@@ -133,55 +197,12 @@ export const AssistantMessage: React.FC<AssistantMessageProps> = ({
                 )}
               </button>
             )}
-
-            {/* View Data Table Toggle */}
-            {hasData && (
-              <button
-                type="button"
-                onClick={() => setIsTableOpen(!isTableOpen)}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-[#1E222B] hover:bg-[#282E3A] border border-[#323849] text-[#CBD5E1] hover:text-white transition-colors cursor-pointer"
-              >
-                <Table className="w-3.5 h-3.5 text-[#FEC50B]" />
-                <span>{isTableOpen ? "Hide Table" : `Data Table (${rowCount ?? data!.length})`}</span>
-                {isTableOpen ? (
-                  <ChevronUp className="w-3 h-3 text-[#94A3B8]" />
-                ) : (
-                  <ChevronDown className="w-3 h-3 text-[#94A3B8]" />
-                )}
-              </button>
-            )}
           </div>
         )}
 
-        {/* Collapsible SQL Block */}
-        {sql && isSqlOpen && (
-          <div className="bg-[#181A20] border border-[#2E3444] rounded-xl overflow-hidden mt-1">
-            <div className="flex items-center justify-between px-3.5 py-2 bg-[#1E222B]/80 border-b border-[#2E3444]">
-              <span className="text-[11px] font-mono text-[#94A3B8] uppercase tracking-wider">
-                PostgreSQL Query
-              </span>
-              <button
-                type="button"
-                onClick={handleCopySql}
-                className="inline-flex items-center gap-1 text-[11px] font-medium text-[#CBD5E1] hover:text-white bg-[#282E3A] hover:bg-[#323849] px-2 py-0.5 rounded transition-colors cursor-pointer"
-              >
-                {copied ? (
-                  <>
-                    <Check className="w-3 h-3 text-emerald-400" />
-                    <span className="text-emerald-400">Copied</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-3 h-3 text-[#94A3B8]" />
-                    <span>Copy</span>
-                  </>
-                )}
-              </button>
-            </div>
-            <pre className="p-3.5 text-[12.5px] font-mono text-[#F1F5F9] whitespace-pre-wrap break-all leading-relaxed overflow-x-auto selection:bg-[#FEC50B]/30">
-              <code>{sql}</code>
-            </pre>
-          </div>
+        {/* Interactive Chart View */}
+        {hasChart && isChartOpen && (
+          <DataChart config={chartConfig!} data={data!} />
         )}
 
         {/* Collapsible Data Table */}
@@ -219,8 +240,16 @@ export const AssistantMessage: React.FC<AssistantMessageProps> = ({
                           >
                             {val === null || val === undefined
                               ? "-"
-                              : isNumber && col.toLowerCase().includes("spend") || col.toLowerCase().includes("revenue") || col.toLowerCase().includes("price") || col.toLowerCase().includes("amount")
-                              ? `$${Number(val).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                              : isNumber &&
+                                (col.toLowerCase().includes("spend") ||
+                                  col.toLowerCase().includes("revenue") ||
+                                  col.toLowerCase().includes("price") ||
+                                  col.toLowerCase().includes("amount") ||
+                                  col.toLowerCase().includes("cost"))
+                              ? `₹${Number(val).toLocaleString("en-IN", {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                })}`
                               : String(val)}
                           </td>
                         );
@@ -230,6 +259,37 @@ export const AssistantMessage: React.FC<AssistantMessageProps> = ({
                 </tbody>
               </table>
             </div>
+          </div>
+        )}
+
+        {/* Collapsible SQL Block */}
+        {sql && isSqlOpen && (
+          <div className="bg-[#181A20] border border-[#2E3444] rounded-xl overflow-hidden mt-1">
+            <div className="flex items-center justify-between px-3.5 py-2 bg-[#1E222B]/80 border-b border-[#2E3444]">
+              <span className="text-[11px] font-mono text-[#94A3B8] uppercase tracking-wider">
+                PostgreSQL Query
+              </span>
+              <button
+                type="button"
+                onClick={handleCopySql}
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-[#CBD5E1] hover:text-white bg-[#282E3A] hover:bg-[#323849] px-2 py-0.5 rounded transition-colors cursor-pointer"
+              >
+                {copied ? (
+                  <>
+                    <Check className="w-3 h-3 text-emerald-400" />
+                    <span className="text-emerald-400">Copied</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3 h-3 text-[#94A3B8]" />
+                    <span>Copy</span>
+                  </>
+                )}
+              </button>
+            </div>
+            <pre className="p-3.5 text-[12.5px] font-mono text-[#F1F5F9] whitespace-pre-wrap break-all leading-relaxed overflow-x-auto selection:bg-[#FEC50B]/30">
+              <code>{sql}</code>
+            </pre>
           </div>
         )}
 

@@ -59,7 +59,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
 
   return (
     <TooltipProvider>
-      <div className="w-full max-w-3xl mx-auto px-6 mb-6">
+      <div className="w-full max-w-4xl mx-auto px-4 md:px-8 mb-6">
         <div className="bg-[#242834] border border-[#323849] rounded-xl p-2 pl-4 flex items-end gap-2 shadow-sm focus-within:border-[#FEC50B]/70 focus-within:ring-1 focus-within:ring-[#FEC50B]/30 transition-all">
           {/* Compact Multiline Input */}
           <textarea
