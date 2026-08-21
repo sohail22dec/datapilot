@@ -76,6 +76,11 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                 key={msg.id}
                 content={msg.content}
                 timestamp={msg.timestamp}
+                sql={msg.sql}
+                data={msg.data}
+                columns={msg.columns}
+                rowCount={msg.rowCount}
+                executionTimeMs={msg.executionTimeMs}
               />
             )
           )

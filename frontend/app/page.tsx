@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import { useState } from "react";
 import { Sidebar } from "../components/sidebar/Sidebar";
 import { ChatWorkspace } from "../components/workspace/ChatWorkspace";
 import { Conversation, Message } from "../types/chat";
@@ -109,14 +109,40 @@ export default function Home() {
       }
 
       const data = await response.json();
-      const assistantText =
-        data.response || "No response received from assistant.";
+
+      // Safely extract string response from various possible API formats
+      let assistantText = "";
+      if (typeof data === "string") {
+        assistantText = data;
+      } else if (typeof data?.response === "string") {
+        assistantText = data.response;
+      } else if (Array.isArray(data?.response)) {
+        assistantText = data.response
+          .map((item: any) =>
+            typeof item === "string"
+              ? item
+              : item?.text || JSON.stringify(item)
+          )
+          .join("\n");
+      } else if (data?.response && typeof data.response === "object") {
+        assistantText =
+          data.response.content || JSON.stringify(data.response, null, 2);
+      } else {
+        assistantText = String(
+          data?.response ?? data?.detail ?? "No response received from assistant."
+        );
+      }
 
       const assistantMessage: Message = {
         id: `msg-${Date.now() + 1}`,
         role: "assistant",
         content: assistantText,
         timestamp: formatCurrentTime(),
+        sql: data?.sql,
+        data: data?.data,
+        columns: data?.columns,
+        rowCount: data?.row_count,
+        executionTimeMs: data?.execution_time_ms,
       };
 
       setConversations((prev) =>
