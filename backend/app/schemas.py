@@ -7,13 +7,21 @@ class ChatRequest(BaseModel):
 
 
 class GeneratedSQL(BaseModel):
-    sql_query: str = Field(
+    is_data_query: bool = Field(
         ...,
-        description="The valid, optimized PostgreSQL SELECT query to answer the user request."
+        description="True if the user is asking a data question that requires querying database tables (sales, customers, revenue, orders, inventory, metrics). False if the user is greeting ('hi', 'hello'), asking identity ('who are you', 'what is your name'), chatting, or asking general non-data questions."
+    )
+    sql_query: Optional[str] = Field(
+        None,
+        description="The valid, optimized PostgreSQL SELECT query to answer the data request. Leave None if is_data_query is False."
     )
     thought_process: str = Field(
         ...,
-        description="Brief reasoning for how the SQL was constructed based on tables and columns."
+        description="Brief reasoning for classification and SQL query construction."
+    )
+    direct_response: Optional[str] = Field(
+        None,
+        description="Friendly, professional conversational response when is_data_query is False."
     )
     tables_used: List[str] = Field(
         default_factory=list,

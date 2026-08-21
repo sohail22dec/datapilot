@@ -1,4 +1,5 @@
 import logging
+import re
 from decimal import Decimal
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional
@@ -17,17 +18,32 @@ llm = ChatGoogleGenerativeAI(
     google_api_key=settings.GEMINI_API_KEY,
 )
 
-# Structured output generator for SQL
+# Structured output generator for SQL & Intent Classification
 structured_sql_llm = llm.with_structured_output(GeneratedSQL)
 
 
-SQL_GENERATION_SYSTEM_PROMPT = """You are DataPilot's expert PostgreSQL data analyst and database architect.
-Your task is to translate natural language user questions into valid, optimized PostgreSQL SELECT queries.
+SQL_GENERATION_SYSTEM_PROMPT = """You are DataPilot AI, an expert PostgreSQL business intelligence data analyst and database architect.
+Your task is to analyze the user's inquiry and either query the database or provide a direct conversational response.
 
 Database Schema:
 {schema_context}
 
-Rules for SQL generation:
+Intent Classification Instructions:
+1. DATA QUERY:
+   - If the user asks for business numbers, sales, revenue, metrics, customers, orders, products, returns, statistics, filtering, or aggregations based on the database schema:
+     -> Set `is_data_query = true`
+     -> Generate a valid, optimized PostgreSQL SELECT query in `sql_query`.
+     -> Populate `tables_used` with the exact tables queried.
+     -> Set `direct_response = null`.
+
+2. GENERAL CONVERSATION / GREETINGS:
+   - If the user sends greetings ("hi", "hello", "hey"), identity questions ("who are you", "what is your name"), pleasantries ("how are you", "thank you"), or asks general questions ("how do I use this", "what tables exist"):
+     -> Set `is_data_query = false`
+     -> Set `sql_query = null` and `tables_used = []`.
+     -> Provide a helpful, professional, friendly response in `direct_response` (introducing yourself as DataPilot and explaining how you can help query and visualize their database).
+     -> NEVER generate dummy SQL like `SELECT 'hello' AS response` for conversational queries.
+
+Rules for SQL generation (when is_data_query is true):
 1. Generate standard, read-only PostgreSQL queries (SELECT or WITH statements).
 2. Only query tables and columns that exist in the provided schema. Do not hallucinate columns.
 3. When joining tables, always use explicit table aliases and qualify column references (e.g. `c.first_name`, `o.order_id`).
@@ -35,7 +51,7 @@ Rules for SQL generation:
 5. For date filtering, use standard PostgreSQL functions (e.g. `DATE_TRUNC('month', order_date)`, `NOW() - INTERVAL '30 days'`).
 6. Apply `LIMIT 100` if the query could return an unbound list of rows.
 7. Always use `LOWER()` or `ILIKE` when filtering text/status/segment columns (e.g. `LOWER(c.customer_segment) = 'vip'`, `LOWER(o.status) = 'completed'`, `LOWER(p.payment_status) = 'successful'`) to avoid case-mismatch issues.
-8. Return ONLY the structured output with valid SQL query, thought process, and tables used.
+8. Return ONLY the structured output.
 """
 
 SQL_HEALING_SYSTEM_PROMPT = """You are a senior PostgreSQL database debugger.
@@ -242,17 +258,35 @@ def process_chat_query(user_question: str) -> ChatResponse:
             model=settings.GEMINI_MODEL,
         )
 
-    # 2. Generate SQL
+    # 2. Generate SQL or Conversational Response
     try:
         sql_plan = generate_sql(user_question, schema_context)
     except Exception as e:
-        logger.error(f"SQL generation failed: {e}")
+        logger.error(f"Intent / SQL generation failed: {e}")
         return ChatResponse(
-            response=f"I couldn't translate your question into a database query. Error: {str(e)}",
+            response=f"I couldn't process your question. Error: {str(e)}",
             model=settings.GEMINI_MODEL,
         )
 
-    current_sql = sql_plan.sql_query
+    # Route General Conversation / Greetings (no SQL or table needed)
+    if not sql_plan.is_data_query or not sql_plan.sql_query or not sql_plan.sql_query.strip():
+        response_text = sql_plan.direct_response or "Hello! I am DataPilot, your AI data analyst. How can I help you explore your database today?"
+        return ChatResponse(
+            response=response_text,
+            model=settings.GEMINI_MODEL,
+        )
+
+    current_sql = sql_plan.sql_query.strip()
+
+    # Safety catch: If model generated a literal constant SELECT without any tables (e.g. SELECT 'message' AS response)
+    if not sql_plan.tables_used and re.match(r"^SELECT\s+['\"].*?['\"]\s*(AS\s+\w+)?\s*;?$", current_sql, flags=re.IGNORECASE):
+        extracted = re.search(r"^SELECT\s+['\"](.*?)['\"]", current_sql, flags=re.IGNORECASE)
+        response_text = extracted.group(1).replace("''", "'") if extracted else (sql_plan.direct_response or "Hello! How can I assist you with your database today?")
+        return ChatResponse(
+            response=response_text,
+            model=settings.GEMINI_MODEL,
+        )
+
     query_result: Optional[Dict[str, Any]] = None
     last_error: Optional[str] = None
 
@@ -275,7 +309,10 @@ def process_chat_query(user_question: str) -> ChatResponse:
                         error_message=last_error,
                         schema_context=schema_context,
                     )
-                    current_sql = healed_plan.sql_query
+                    if healed_plan.sql_query:
+                        current_sql = healed_plan.sql_query.strip()
+                    else:
+                        break
                 except Exception as heal_err:
                     logger.error(f"Self-healing prompt failed: {heal_err}")
                     break
