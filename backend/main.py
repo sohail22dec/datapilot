@@ -1,13 +1,31 @@
+import logging
+from contextlib import asynccontextmanager
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.endpoints import router as api_router
+from app.database import warm_database_pool
+from app.tools.schema_tool import get_schema_context
+
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Pre-warms Supabase connection pool and pre-caches minified schema on boot."""
+    logger.info("Initializing DataPilot backend services...")
+    warm_database_pool()
+    get_schema_context()
+    logger.info("Supabase pool pre-warmed & schema pre-cached in memory.")
+    yield
+
 
 app = FastAPI(
     title="DataPilot Backend API",
-    description="FastAPI service with Google Gemini 2.5 Flash & Supabase Database Skills",
+    description="FastAPI service with High-Speed Agentic Business Intelligence & Supabase Database Skills",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 # Enable CORS for frontend integration

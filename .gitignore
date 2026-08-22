@@ -11,6 +11,11 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# Next.js Auto-generated Agent Rules
+frontend/AGENTS.md
+frontend/CLAUDE.md
+**/CLAUDE.md
+
 # Python & Virtual Environments
 __pycache__/
 *.py[cod]
@@ -49,4 +54,3 @@ ENV/
 Thumbs.db
 .vscode/
 .idea/
-

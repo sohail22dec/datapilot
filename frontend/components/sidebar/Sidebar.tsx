@@ -88,7 +88,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     {conv.title || "New Conversation"}
                   </span>
 
-                  {onDeleteConversation && conversations.length > 1 && (
+                  {onDeleteConversation && (
                     <button
                       type="button"
                       onClick={(e) => {

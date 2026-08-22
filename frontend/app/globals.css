@@ -26,6 +26,11 @@
 }
 
 /* Custom soft dark scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #333948 transparent;
+}
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import { useState } from "react";
 import { Sidebar } from "../components/sidebar/Sidebar";
 import { ChatWorkspace } from "../components/workspace/ChatWorkspace";
 import { Conversation, Message } from "../types/chat";
@@ -61,7 +61,18 @@ export default function Home() {
   const handleDeleteConversation = (id: string) => {
     setConversations((prev) => {
       const filtered = prev.filter((c) => c.id !== id);
-      if (activeConversationId === id && filtered.length > 0) {
+      if (filtered.length === 0) {
+        const freshId = `conv-${Date.now()}`;
+        const freshConv: Conversation = {
+          id: freshId,
+          title: "New Conversation",
+          timestamp: formatCurrentTime(),
+          messages: [],
+        };
+        setActiveConversationId(freshId);
+        return [freshConv];
+      }
+      if (activeConversationId === id) {
         setActiveConversationId(filtered[0].id);
       }
       return filtered;
@@ -77,7 +88,17 @@ export default function Home() {
       timestamp: timeStr,
     };
 
-    // Update conversation with user message & update title if first message
+    const assistantMsgId = `msg-${Date.now() + 1}`;
+    const initialAssistantMessage: Message = {
+      id: assistantMsgId,
+      role: "assistant",
+      content: "",
+      timestamp: timeStr,
+      isStreaming: true,
+      steps: ["Analyzing inquiry & schema..."],
+    };
+
+    // Update conversation with user message & streaming assistant message
     setConversations((prev) =>
       prev.map((c) => {
         if (c.id === activeConversationId) {
@@ -86,7 +107,7 @@ export default function Home() {
             ...c,
             title: isFirstMessage ? text : c.title,
             timestamp: timeStr,
-            messages: [...c.messages, userMessage],
+            messages: [...c.messages, userMessage, initialAssistantMessage],
           };
         }
         return c;
@@ -96,7 +117,7 @@ export default function Home() {
     setIsLoading(true);
 
     try {
-      const response = await fetch("http://localhost:8000/api/chat", {
+      const response = await fetch("http://localhost:8000/api/chat/stream", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -108,50 +129,160 @@ export default function Home() {
         throw new Error(`API error: ${response.statusText}`);
       }
 
-      const data = await response.json();
-      const assistantText =
-        data.response || "No response received from assistant.";
+      if (!response.body) {
+        throw new Error("No readable stream received from backend.");
+      }
 
-      const assistantMessage: Message = {
-        id: `msg-${Date.now() + 1}`,
-        role: "assistant",
-        content: assistantText,
-        timestamp: formatCurrentTime(),
-      };
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
 
-      setConversations((prev) =>
-        prev.map((c) =>
-          c.id === activeConversationId
-            ? { ...c, messages: [...c.messages, assistantMessage] }
-            : c
-        )
-      );
+      let currentEvent = "";
+      let accumulatedText = "";
+      const accumulatedSteps: string[] = ["Analyzing inquiry & schema..."];
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed.startsWith("event:")) {
+            currentEvent = trimmed.replace("event:", "").trim();
+          } else if (trimmed.startsWith("data:")) {
+            const rawData = trimmed.replace("data:", "").trim();
+            if (!rawData) continue;
+
+            try {
+              const parsed = JSON.parse(rawData);
+
+              if (currentEvent === "step") {
+                const stepText = parsed.badge || parsed.step || "Processing...";
+                if (!accumulatedSteps.includes(stepText)) {
+                  accumulatedSteps.push(stepText);
+                }
+
+                setConversations((prev) =>
+                  prev.map((c) =>
+                    c.id === activeConversationId
+                      ? {
+                          ...c,
+                          messages: c.messages.map((m) =>
+                            m.id === assistantMsgId
+                              ? {
+                                  ...m,
+                                  steps: [...accumulatedSteps],
+                                  sql: parsed.sql || m.sql,
+                                }
+                              : m
+                          ),
+                        }
+                      : c
+                  )
+                );
+              } else if (currentEvent === "token") {
+                const delta = parsed.delta || "";
+                accumulatedText += delta;
+
+                setConversations((prev) =>
+                  prev.map((c) =>
+                    c.id === activeConversationId
+                      ? {
+                          ...c,
+                          messages: c.messages.map((m) =>
+                            m.id === assistantMsgId
+                              ? {
+                                  ...m,
+                                  content: accumulatedText,
+                                }
+                              : m
+                          ),
+                        }
+                      : c
+                  )
+                );
+              } else if (currentEvent === "done") {
+                setConversations((prev) =>
+                  prev.map((c) =>
+                    c.id === activeConversationId
+                      ? {
+                          ...c,
+                          messages: c.messages.map((m) =>
+                            m.id === assistantMsgId
+                              ? {
+                                  ...m,
+                                  content: parsed.response || accumulatedText,
+                                  sql: parsed.sql,
+                                  data: parsed.data,
+                                  columns: parsed.columns,
+                                  rowCount: parsed.row_count,
+                                  executionTimeMs: parsed.execution_time_ms,
+                                  chartConfig: parsed.chart_config,
+                                  thoughtTrace: parsed.thought_trace,
+                                  isStreaming: false,
+                                }
+                              : m
+                          ),
+                        }
+                      : c
+                  )
+                );
+              }
+            } catch (err) {
+              console.error("Error parsing SSE data line:", err, rawData);
+            }
+          }
+        }
+      }
     } catch (error) {
       console.error("Failed to fetch response from backend:", error);
 
-      const fallbackMessage: Message = {
-        id: `msg-${Date.now() + 1}`,
-        role: "assistant",
-        content:
-          "I received your question. (Backend service is currently connecting at http://localhost:8000)",
-        timestamp: formatCurrentTime(),
-      };
-
       setConversations((prev) =>
         prev.map((c) =>
           c.id === activeConversationId
-            ? { ...c, messages: [...c.messages, fallbackMessage] }
+            ? {
+                ...c,
+                messages: c.messages.map((m) =>
+                  m.id === assistantMsgId
+                    ? {
+                        ...m,
+                        content:
+                          "I encountered an issue connecting to the backend service. Please check your backend connection at http://localhost:8000.",
+                        isStreaming: false,
+                      }
+                    : m
+                ),
+              }
             : c
         )
       );
     } finally {
       setIsLoading(false);
+      // Ensure streaming flag is cleared
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === activeConversationId
+            ? {
+                ...c,
+                messages: c.messages.map((m) =>
+                  m.id === assistantMsgId
+                    ? { ...m, isStreaming: false }
+                    : m
+                ),
+              }
+            : c
+        )
+      );
     }
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#181A20] text-[#F4F4F5]">
-      {/* Left Collapsible Sidebar */}
+    <div className="flex h-screen w-screen bg-[#181A20] text-slate-100 overflow-hidden font-sans antialiased">
+      {/* Collapsible Left Sidebar */}
       <Sidebar
         isOpen={isSidebarOpen}
         onToggle={handleToggleSidebar}
@@ -163,11 +294,11 @@ export default function Home() {
         userName="Sohel Islam"
       />
 
-      {/* Main Workspace */}
+      {/* Main Workspace Area */}
       <ChatWorkspace
         isSidebarOpen={isSidebarOpen}
         onToggleSidebar={handleToggleSidebar}
-        messages={activeConversation?.messages || []}
+        messages={activeConversation.messages}
         onSendMessage={handleSendMessage}
         isLoading={isLoading}
         userName="Sohel Islam"

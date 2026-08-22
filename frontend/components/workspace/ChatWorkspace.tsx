@@ -32,6 +32,8 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
     scrollEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
 
+  const hasStreamingMessage = messages.some((m) => m.isStreaming);
+
   return (
     <main className="flex-1 h-screen flex flex-col justify-between bg-[#181A20] overflow-hidden relative">
       {/* Floating Sidebar Open Button (only when sidebar is closed) */}
@@ -51,57 +53,68 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
       )}
 
       {/* Messages Scroll Area */}
-      <div className="flex-1 overflow-y-auto px-8 pt-8 pb-5 max-w-4xl w-full mx-auto flex flex-col justify-start">
-        {messages.length === 0 ? (
-          <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
-            <DataPilotIcon size="lg" className="mb-4" />
-            <h2 className="text-xl font-semibold text-white mb-2">
-              Ask anything about your data
-            </h2>
-            <p className="text-sm text-[#94A3B8] max-w-md">
-              Ask questions about revenue, user trends, top products, or analytics.
-            </p>
-          </div>
-        ) : (
-          messages.map((msg) =>
-            msg.role === "user" ? (
-              <UserMessage
-                key={msg.id}
-                content={msg.content}
-                timestamp={msg.timestamp}
-                userName={userName}
-              />
-            ) : (
-              <AssistantMessage
-                key={msg.id}
-                content={msg.content}
-                timestamp={msg.timestamp}
-              />
+      <div className="flex-1 overflow-y-auto w-full">
+        <div className="max-w-4xl w-full mx-auto px-4 md:px-8 pt-8 pb-5 flex flex-col justify-start min-h-full">
+          {messages.length === 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
+              <DataPilotIcon size="lg" className="mb-4" />
+              <h2 className="text-xl font-semibold text-white mb-2">
+                Ask anything about your data
+              </h2>
+              <p className="text-sm text-[#94A3B8] max-w-md">
+                Ask questions about revenue, user trends, top products, or analytics.
+              </p>
+            </div>
+          ) : (
+            messages.map((msg) =>
+              msg.role === "user" ? (
+                <UserMessage
+                  key={msg.id}
+                  content={msg.content}
+                  timestamp={msg.timestamp}
+                  userName={userName}
+                />
+              ) : (
+                <AssistantMessage
+                  key={msg.id}
+                  content={msg.content}
+                  timestamp={msg.timestamp}
+                  sql={msg.sql}
+                  data={msg.data}
+                  columns={msg.columns}
+                  rowCount={msg.rowCount}
+                  executionTimeMs={msg.executionTimeMs}
+                  chartConfig={msg.chartConfig}
+                  isStreaming={msg.isStreaming}
+                  steps={msg.steps}
+                  thoughtTrace={msg.thoughtTrace}
+                />
+              )
             )
-          )
-        )}
+          )}
 
-        {/* Loading Indicator */}
-        {isLoading && (
-          <div className="flex items-start justify-start gap-3 my-3.5 w-full">
-            <div className="shrink-0 mt-0.5">
-              <DataPilotIcon size="md" />
+          {/* Loading Indicator (Only if waiting for initial server connection before message is created) */}
+          {isLoading && !hasStreamingMessage && (
+            <div className="flex items-start justify-start gap-3 my-3.5 w-full">
+              <div className="shrink-0 mt-0.5">
+                <DataPilotIcon size="md" />
+              </div>
+              <div className="bg-[#242834] border border-[#323849] rounded-2xl rounded-tl-xs px-5 py-3.5 shadow-xs flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-[#FEC50B] animate-pulse" />
+                <span
+                  className="w-2 h-2 rounded-full bg-[#FEC50B] animate-pulse"
+                  style={{ animationDelay: "200ms" }}
+                />
+                <span
+                  className="w-2 h-2 rounded-full bg-[#FEC50B] animate-pulse"
+                  style={{ animationDelay: "400ms" }}
+                />
+              </div>
             </div>
-            <div className="bg-[#242834] border border-[#323849] rounded-2xl rounded-tl-xs px-5 py-3.5 shadow-xs flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-[#FEC50B] animate-pulse" />
-              <span
-                className="w-2 h-2 rounded-full bg-[#FEC50B] animate-pulse"
-                style={{ animationDelay: "200ms" }}
-              />
-              <span
-                className="w-2 h-2 rounded-full bg-[#FEC50B] animate-pulse"
-                style={{ animationDelay: "400ms" }}
-              />
-            </div>
-          </div>
-        )}
+          )}
 
-        <div ref={scrollEndRef} />
+          <div ref={scrollEndRef} />
+        </div>
       </div>
 
       {/* Compact Composer at bottom */}
