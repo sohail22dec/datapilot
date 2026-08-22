@@ -1,6 +1,8 @@
 from fastapi import APIRouter
+from fastapi.responses import StreamingResponse
+
 from app.schemas import ChatRequest, ChatResponse, DatabaseHealthResponse
-from app.llm_service import process_chat_query
+from app.llm_service import process_chat_query, stream_agent_workflow
 from app.database import get_schema_metadata
 
 router = APIRouter()
@@ -25,5 +27,22 @@ def database_health():
 
 @router.post("/api/chat", response_model=ChatResponse)
 def chat(request: ChatRequest):
-    """Text-to-SQL data analyst chat endpoint powered by Gemini 2.5 Flash & Supabase."""
+    """Synchronous text-to-SQL data analyst chat endpoint."""
     return process_chat_query(request.message)
+
+
+@router.post("/api/chat/stream")
+def chat_stream(request: ChatRequest):
+    """
+    Real-time Server-Sent Events (SSE) streaming endpoint.
+    Emits live step badges, token-by-token text generation (<300ms), and final chart data.
+    """
+    return StreamingResponse(
+        stream_agent_workflow(request.message),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )

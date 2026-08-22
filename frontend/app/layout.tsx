@@ -16,7 +16,12 @@ export const metadata: Metadata = {
   title: "DataPilot — AI-Powered Data Analytics",
   description: "Minimalist AI-powered data analytics workspace for business intelligence.",
   icons: {
-    icon: "/favicon.ico",
+    icon: [
+      { url: "/brand/datapilot-mark.svg", type: "image/svg+xml" },
+      { url: "/favicon.svg", type: "image/svg+xml" },
+    ],
+    shortcut: "/brand/datapilot-mark.svg",
+    apple: "/brand/datapilot-mark.svg",
   },
 };
 

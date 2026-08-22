@@ -16,6 +16,7 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
+  Legend,
 } from "recharts";
 import { ChartConfig, QueryDataRow } from "../../types/chat";
 
@@ -24,9 +25,12 @@ interface DataChartProps {
   data: QueryDataRow[];
 }
 
-const PALETTE = [
-  "#FEC50B", // Primary Golden Yellow
-  "#38BDF8", // Sky Blue
+const PRIMARY_YELLOW = "#FEC50B";
+
+// DataPilot Vibrant Color Palette for multi-slice donuts
+const DONUT_COLORS = [
+  "#FEC50B", // Primary Gold
+  "#38BDF8", // Cyan
   "#818CF8", // Indigo
   "#34D399", // Emerald
   "#FB7185", // Rose
@@ -36,7 +40,7 @@ const PALETTE = [
 ];
 
 // Helper to format values for currency vs regular numbers
-const formatValue = (val: any, keyName: string = ""): string => {
+const formatValue = (val: unknown, keyName: string = ""): string => {
   if (typeof val !== "number") return String(val ?? "");
 
   const k = keyName.toLowerCase();
@@ -63,7 +67,7 @@ const formatValue = (val: any, keyName: string = ""): string => {
 };
 
 // Compact Axis Label Formatter
-const formatAxisValue = (val: any): string => {
+const formatAxisValue = (val: unknown): string => {
   if (typeof val !== "number") {
     const s = String(val ?? "");
     return s.length > 14 ? `${s.slice(0, 12)}...` : s;
@@ -74,8 +78,21 @@ const formatAxisValue = (val: any): string => {
   return String(val);
 };
 
+interface TooltipProps {
+  active?: boolean;
+  payload?: Array<{
+    value?: unknown;
+    name?: string;
+    color?: string;
+    dataKey?: string;
+    payload?: { name?: string; [key: string]: unknown };
+  }>;
+  label?: string;
+  yKey?: string;
+}
+
 // Custom Dark Tooltip
-const CustomTooltip = ({ active, payload, label, yKey }: any) => {
+const CustomTooltip = ({ active, payload, label, yKey }: TooltipProps) => {
   if (active && payload && payload.length) {
     const item = payload[0];
     const rawVal = item.value;
@@ -89,7 +106,7 @@ const CustomTooltip = ({ active, payload, label, yKey }: any) => {
         <div className="text-white font-semibold font-mono text-[13px] flex items-center gap-1.5">
           <span
             className="w-2 h-2 rounded-full inline-block"
-            style={{ backgroundColor: item.color || "#FEC50B" }}
+            style={{ backgroundColor: PRIMARY_YELLOW }}
           />
           <span>{formatValue(rawVal, yKey || item.dataKey)}</span>
         </div>
@@ -111,27 +128,117 @@ export const DataChart: React.FC<DataChartProps> = ({ config, data }) => {
     ) ||
     Object.keys(data[0])[1];
 
-  // Limit chart data points for visual cleanliness
-  const chartData = data.slice(0, 15);
+  const chartData = data.map((d) => ({
+    ...d,
+    [yKey]: typeof d[yKey] === "number" ? d[yKey] : Number(d[yKey]) || 0,
+  }));
+
+  const cleanTitle =
+    config.title ||
+    `${yKey.replace(/_/g, " ").toUpperCase()} by ${xKey
+      .replace(/_/g, " ")
+      .toUpperCase()}`;
 
   return (
-    <div className="w-full bg-[#181A20] border border-[#2E3444] rounded-xl p-4 mt-2 select-none">
-      {config.title && (
-        <div className="text-xs font-semibold text-[#CBD5E1] tracking-wide mb-3 flex items-center justify-between">
-          <span>{config.title}</span>
-          <span className="text-[10px] text-[#94A3B8] font-mono uppercase">
-            {type} chart
-          </span>
-        </div>
-      )}
+    <div className="w-full bg-[#181A20] border border-[#2E3444] rounded-xl p-4 mt-2 max-w-full">
+      <div className="flex items-center justify-between mb-3 px-1">
+        <h4 className="text-xs font-semibold text-[#CBD5E1] uppercase tracking-wider font-mono">
+          {cleanTitle}
+        </h4>
+        <span className="text-[10px] text-[#94A3B8] font-mono uppercase bg-[#1E222B] border border-[#2E3444] px-2 py-0.5 rounded">
+          {type.toUpperCase()} CHART
+        </span>
+      </div>
 
-      <div className="w-full h-56">
+      <div className="h-64 w-full">
         <ResponsiveContainer width="100%" height="100%">
-          {type === "donut" ? (
-            <PieChart>
+          {type === "line" ? (
+            <LineChart
+              data={chartData}
+              margin={{ top: 10, right: 20, left: 0, bottom: 25 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#2E3444" opacity={0.6} />
+              <XAxis
+                dataKey={xKey}
+                stroke="#64748B"
+                fontSize={11}
+                tickLine={false}
+                dy={10}
+                tickFormatter={(val) => {
+                  const s = String(val ?? "");
+                  return s.length > 12 ? `${s.slice(0, 10)}...` : s;
+                }}
+              />
+              <YAxis
+                stroke="#64748B"
+                fontSize={11}
+                tickLine={false}
+                tickFormatter={formatAxisValue}
+                width={50}
+              />
               <Tooltip
                 content={<CustomTooltip yKey={yKey} />}
-                cursor={{ fill: "rgba(254, 197, 11, 0.05)" }}
+                cursor={{ stroke: "#3E4557", strokeWidth: 1, strokeDasharray: "4 4" }}
+              />
+              <Line
+                type="monotone"
+                dataKey={yKey}
+                stroke={PRIMARY_YELLOW}
+                strokeWidth={2.5}
+                dot={{ fill: "#181A20", stroke: PRIMARY_YELLOW, strokeWidth: 2, r: 4 }}
+                activeDot={{ r: 6, fill: PRIMARY_YELLOW }}
+              />
+            </LineChart>
+          ) : type === "area" ? (
+            <AreaChart
+              data={chartData}
+              margin={{ top: 10, right: 20, left: 0, bottom: 25 }}
+            >
+              <defs>
+                <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={PRIMARY_YELLOW} stopOpacity={0.4} />
+                  <stop offset="95%" stopColor={PRIMARY_YELLOW} stopOpacity={0.0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#2E3444" opacity={0.6} />
+              <XAxis
+                dataKey={xKey}
+                stroke="#64748B"
+                fontSize={11}
+                tickLine={false}
+                dy={10}
+                tickFormatter={(val) => {
+                  const s = String(val ?? "");
+                  return s.length > 12 ? `${s.slice(0, 10)}...` : s;
+                }}
+              />
+              <YAxis
+                stroke="#64748B"
+                fontSize={11}
+                tickLine={false}
+                tickFormatter={formatAxisValue}
+                width={50}
+              />
+              <Tooltip
+                content={<CustomTooltip yKey={yKey} />}
+                cursor={{ stroke: "#3E4557", strokeWidth: 1, strokeDasharray: "4 4" }}
+              />
+              <Area
+                type="monotone"
+                dataKey={yKey}
+                stroke={PRIMARY_YELLOW}
+                strokeWidth={2}
+                fillOpacity={1}
+                fill="url(#areaGradient)"
+              />
+            </AreaChart>
+          ) : type === "donut" ? (
+            <PieChart>
+              <Tooltip content={<CustomTooltip yKey={yKey} />} />
+              <Legend
+                formatter={(value) => (
+                  <span className="text-xs text-[#CBD5E1] ml-1">{value}</span>
+                )}
               />
               <Pie
                 data={chartData}
@@ -141,142 +248,45 @@ export const DataChart: React.FC<DataChartProps> = ({ config, data }) => {
                 cy="50%"
                 innerRadius={50}
                 outerRadius={80}
-                paddingAngle={3}
-                stroke="#181A20"
-                strokeWidth={2}
+                paddingAngle={4}
               >
                 {chartData.map((_, index) => (
                   <Cell
                     key={`cell-${index}`}
-                    fill={PALETTE[index % PALETTE.length]}
+                    fill={DONUT_COLORS[index % DONUT_COLORS.length]}
+                    stroke="#181A20"
+                    strokeWidth={2}
                   />
                 ))}
               </Pie>
             </PieChart>
-          ) : type === "line" ? (
-            <LineChart
-              data={chartData}
-              margin={{ top: 10, right: 10, left: -10, bottom: 5 }}
-            >
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke="#2E3444"
-                vertical={false}
-              />
-              <XAxis
-                dataKey={xKey}
-                stroke="#94A3B8"
-                fontSize={11}
-                tickLine={false}
-                axisLine={{ stroke: "#2E3444" }}
-                tickFormatter={formatAxisValue}
-              />
-              <YAxis
-                stroke="#94A3B8"
-                fontSize={11}
-                tickLine={false}
-                axisLine={{ stroke: "#2E3444" }}
-                tickFormatter={formatAxisValue}
-              />
-              <Tooltip
-                content={<CustomTooltip yKey={yKey} />}
-                cursor={{ stroke: "#FEC50B", strokeWidth: 1, strokeDasharray: "4 4" }}
-              />
-              <Line
-                type="monotone"
-                dataKey={yKey}
-                stroke="#FEC50B"
-                strokeWidth={2.5}
-                dot={{ fill: "#FEC50B", strokeWidth: 0, r: 3.5 }}
-                activeDot={{ r: 6, fill: "#FFFFFF", stroke: "#FEC50B", strokeWidth: 2 }}
-              />
-            </LineChart>
-          ) : type === "area" ? (
-            <AreaChart
-              data={chartData}
-              margin={{ top: 10, right: 10, left: -10, bottom: 5 }}
-            >
-              <defs>
-                <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#FEC50B" stopOpacity={0.4} />
-                  <stop offset="95%" stopColor="#FEC50B" stopOpacity={0.0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke="#2E3444"
-                vertical={false}
-              />
-              <XAxis
-                dataKey={xKey}
-                stroke="#94A3B8"
-                fontSize={11}
-                tickLine={false}
-                axisLine={{ stroke: "#2E3444" }}
-                tickFormatter={formatAxisValue}
-              />
-              <YAxis
-                stroke="#94A3B8"
-                fontSize={11}
-                tickLine={false}
-                axisLine={{ stroke: "#2E3444" }}
-                tickFormatter={formatAxisValue}
-              />
-              <Tooltip
-                content={<CustomTooltip yKey={yKey} />}
-                cursor={{ stroke: "#FEC50B", strokeWidth: 1, strokeDasharray: "4 4" }}
-              />
-              <Area
-                type="monotone"
-                dataKey={yKey}
-                stroke="#FEC50B"
-                strokeWidth={2.5}
-                fillOpacity={1}
-                fill="url(#areaGradient)"
-              />
-            </AreaChart>
           ) : (
+            // Default: Bar Chart in unified signature yellow
             <BarChart
               data={chartData}
-              margin={{ top: 10, right: 10, left: -10, bottom: 5 }}
+              margin={{ top: 10, right: 20, left: 0, bottom: 25 }}
             >
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke="#2E3444"
-                vertical={false}
-              />
+              <CartesianGrid strokeDasharray="3 3" stroke="#2E3444" opacity={0.6} />
               <XAxis
                 dataKey={xKey}
-                stroke="#94A3B8"
+                stroke="#64748B"
                 fontSize={11}
                 tickLine={false}
-                axisLine={{ stroke: "#2E3444" }}
-                tickFormatter={formatAxisValue}
+                dy={10}
+                tickFormatter={(val) => {
+                  const s = String(val ?? "");
+                  return s.length > 12 ? `${s.slice(0, 10)}...` : s;
+                }}
               />
               <YAxis
-                stroke="#94A3B8"
+                stroke="#64748B"
                 fontSize={11}
                 tickLine={false}
-                axisLine={{ stroke: "#2E3444" }}
                 tickFormatter={formatAxisValue}
+                width={50}
               />
-              <Tooltip
-                content={<CustomTooltip yKey={yKey} />}
-                cursor={{ fill: "rgba(254, 197, 11, 0.06)" }}
-              />
-              <Bar
-                dataKey={yKey}
-                fill="#FEC50B"
-                radius={[4, 4, 0, 0]}
-                maxBarSize={48}
-              >
-                {chartData.map((_, index) => (
-                  <Cell
-                    key={`bar-${index}`}
-                    fill={index === 0 ? "#FEC50B" : "#F4B900"}
-                  />
-                ))}
-              </Bar>
+              <Tooltip content={<CustomTooltip yKey={yKey} />} cursor={false} />
+              <Bar dataKey={yKey} fill={PRIMARY_YELLOW} radius={[6, 6, 0, 0]} />
             </BarChart>
           )}
         </ResponsiveContainer>

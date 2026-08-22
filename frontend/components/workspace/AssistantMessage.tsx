@@ -10,13 +10,14 @@ import {
   Table,
   BarChart3,
   Zap,
+  Loader2,
 } from "lucide-react";
 import { DataPilotIcon } from "../brand/DataPilotLogo";
 import { DataChart } from "./DataChart";
 import { ChartConfig, QueryDataRow } from "../../types/chat";
 
 interface AssistantMessageProps {
-  content: string | any;
+  content: string | unknown;
   timestamp: string;
   sql?: string;
   data?: QueryDataRow[];
@@ -24,6 +25,9 @@ interface AssistantMessageProps {
   rowCount?: number;
   executionTimeMs?: number;
   chartConfig?: ChartConfig | null;
+  isStreaming?: boolean;
+  steps?: string[];
+  thoughtTrace?: string[];
 }
 
 export const AssistantMessage: React.FC<AssistantMessageProps> = ({
@@ -35,6 +39,8 @@ export const AssistantMessage: React.FC<AssistantMessageProps> = ({
   rowCount,
   executionTimeMs,
   chartConfig,
+  isStreaming,
+  steps,
 }) => {
   const hasData = Array.isArray(data) && data.length > 0;
   const hasChart = Boolean(chartConfig && chartConfig.type && hasData && data!.length >= 2);
@@ -57,7 +63,7 @@ export const AssistantMessage: React.FC<AssistantMessageProps> = ({
   };
 
   // Helper to format text with bold segments and bullet points
-  const renderFormattedContent = (rawContent: any) => {
+  const renderFormattedContent = (rawContent: unknown) => {
     const text =
       typeof rawContent === "string"
         ? rawContent
@@ -65,50 +71,69 @@ export const AssistantMessage: React.FC<AssistantMessageProps> = ({
         ? JSON.stringify(rawContent, null, 2)
         : String(rawContent ?? "");
 
-    const lines = text.split("\n");
-
-    return lines.map((line, lineIdx) => {
-      const isBullet = line.trim().startsWith("* ") || line.trim().startsWith("- ");
-      const cleanLine = isBullet ? line.trim().replace(/^[\*\-]\s+/, "") : line;
-
-      const parts = cleanLine.split(/(\*\*.*?\*\*)/g);
-      const renderedParts = parts.map((part, index) => {
-        if (part.startsWith("**") && part.endsWith("**")) {
-          return (
-            <strong key={index} className="font-semibold text-white">
-              {part.slice(2, -2)}
-            </strong>
-          );
-        }
-        return <span key={index}>{part}</span>;
-      });
-
-      if (isBullet) {
-        return (
-          <div key={lineIdx} className="flex items-start gap-2 my-1 pl-1">
-            <span className="text-[#FEC50B] font-bold text-xs mt-1.5 leading-none">•</span>
-            <div className="flex-1 text-[14px] text-[#F1F5F9] leading-relaxed">
-              {renderedParts}
-            </div>
-          </div>
-        );
-      }
-
+    if (!text && isStreaming) {
       return (
-        <div
-          key={lineIdx}
-          className={`text-[14px] text-[#F1F5F9] leading-relaxed ${
-            line.trim() === "" ? "h-2" : "my-0.5"
-          }`}
-        >
-          {renderedParts}
+        <div className="flex items-center gap-2 text-sm text-[#94A3B8] py-1">
+          <Loader2 className="w-4 h-4 text-[#FEC50B] animate-spin" />
+          <span>{steps && steps.length > 0 ? steps[steps.length - 1] : "Generating insights..."}</span>
         </div>
       );
-    });
+    }
+
+    const lines = text.split("\n");
+
+    return (
+      <>
+        {lines.map((line, lineIdx) => {
+          const isBullet = line.trim().startsWith("* ") || line.trim().startsWith("- ");
+          const cleanLine = isBullet ? line.trim().replace(/^[\*\-]\s+/, "") : line;
+
+          const parts = cleanLine.split(/(\*\*.*?\*\*)/g);
+          const renderedParts = parts.map((part, index) => {
+            if (part.startsWith("**") && part.endsWith("**")) {
+              return (
+                <strong key={index} className="font-semibold text-white">
+                  {part.slice(2, -2)}
+                </strong>
+              );
+            }
+            return <span key={index}>{part}</span>;
+          });
+
+          if (isBullet) {
+            return (
+              <div key={lineIdx} className="flex items-start gap-2 my-1 pl-1">
+                <span className="text-[#FEC50B] font-bold text-xs mt-1.5 leading-none">•</span>
+                <div className="flex-1 text-[14px] text-[#F1F5F9] leading-relaxed">
+                  {renderedParts}
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <div
+              key={lineIdx}
+              className={`text-[14px] text-[#F1F5F9] leading-relaxed ${
+                line.trim() === "" ? "h-2" : "my-0.5"
+              }`}
+            >
+              {renderedParts}
+            </div>
+          );
+        })}
+        {isStreaming && (
+          <span className="inline-block w-1.5 h-4 bg-[#FEC50B] animate-pulse ml-0.5 align-middle rounded-xs" />
+        )}
+      </>
+    );
   };
 
   const tableColumns =
     columns && columns.length > 0 ? columns : hasData ? Object.keys(data![0]) : [];
+
+  const activeSteps = steps || [];
+  const latestStep = activeSteps.length > 0 ? activeSteps[activeSteps.length - 1] : null;
 
   return (
     <div className="flex items-start justify-start gap-3 my-4 w-full">
@@ -119,11 +144,19 @@ export const AssistantMessage: React.FC<AssistantMessageProps> = ({
 
       {/* Softer Dark Response Card */}
       <div className="bg-[#242834] border border-[#323849] rounded-2xl rounded-tl-xs px-5 py-4 max-w-[720px] w-full shadow-sm flex flex-col gap-3.5">
+        {/* Real-time Streaming Step Badge */}
+        {isStreaming && latestStep && (
+          <div className="inline-flex items-center gap-2 self-start px-2.5 py-1 rounded-full bg-[#181A20] border border-[#FEC50B]/30 text-xs font-medium text-[#FEC50B]">
+            <Loader2 className="w-3 h-3 animate-spin" />
+            <span>{latestStep}</span>
+          </div>
+        )}
+
         {/* Main Text Content */}
         <div className="select-text">{renderFormattedContent(content)}</div>
 
         {/* Action Pills Bar (Chart Toggle, Table Toggle, SQL Toggle) */}
-        {(hasChart || hasData || sql) && (
+        {(!isStreaming && (hasChart || hasData || sql)) && (
           <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-[#323849]/60">
             {/* Chart View Toggle */}
             {hasChart && (
@@ -201,12 +234,12 @@ export const AssistantMessage: React.FC<AssistantMessageProps> = ({
         )}
 
         {/* Interactive Chart View */}
-        {hasChart && isChartOpen && (
+        {!isStreaming && hasChart && isChartOpen && (
           <DataChart config={chartConfig!} data={data!} />
         )}
 
         {/* Collapsible Data Table */}
-        {hasData && isTableOpen && (
+        {!isStreaming && hasData && isTableOpen && (
           <div className="bg-[#181A20] border border-[#2E3444] rounded-xl overflow-hidden mt-1 max-w-full">
             <div className="overflow-x-auto max-h-64 scrollbar-thin">
               <table className="w-full text-left text-xs border-collapse">
@@ -263,7 +296,7 @@ export const AssistantMessage: React.FC<AssistantMessageProps> = ({
         )}
 
         {/* Collapsible SQL Block */}
-        {sql && isSqlOpen && (
+        {!isStreaming && sql && isSqlOpen && (
           <div className="bg-[#181A20] border border-[#2E3444] rounded-xl overflow-hidden mt-1">
             <div className="flex items-center justify-between px-3.5 py-2 bg-[#1E222B]/80 border-b border-[#2E3444]">
               <span className="text-[11px] font-mono text-[#94A3B8] uppercase tracking-wider">

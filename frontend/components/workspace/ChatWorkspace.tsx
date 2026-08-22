@@ -32,6 +32,8 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
     scrollEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
 
+  const hasStreamingMessage = messages.some((m) => m.isStreaming);
+
   return (
     <main className="flex-1 h-screen flex flex-col justify-between bg-[#181A20] overflow-hidden relative">
       {/* Floating Sidebar Open Button (only when sidebar is closed) */}
@@ -83,13 +85,16 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                   rowCount={msg.rowCount}
                   executionTimeMs={msg.executionTimeMs}
                   chartConfig={msg.chartConfig}
+                  isStreaming={msg.isStreaming}
+                  steps={msg.steps}
+                  thoughtTrace={msg.thoughtTrace}
                 />
               )
             )
           )}
 
-          {/* Loading Indicator */}
-          {isLoading && (
+          {/* Loading Indicator (Only if waiting for initial server connection before message is created) */}
+          {isLoading && !hasStreamingMessage && (
             <div className="flex items-start justify-start gap-3 my-3.5 w-full">
               <div className="shrink-0 mt-0.5">
                 <DataPilotIcon size="md" />

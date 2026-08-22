@@ -24,6 +24,9 @@ export interface Message {
   rowCount?: number;
   executionTimeMs?: number;
   chartConfig?: ChartConfig | null;
+  isStreaming?: boolean;
+  steps?: string[];
+  thoughtTrace?: string[];
 }
 
 export interface Conversation {

@@ -3,7 +3,7 @@ import re
 import time
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError

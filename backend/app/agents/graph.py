@@ -1,4 +1,3 @@
-import logging
 from langgraph.graph import StateGraph, START, END
 
 from app.agents.state import AgentState
@@ -10,8 +9,6 @@ from app.agents.nodes import (
     email_node,
     synthesis_node,
 )
-
-logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------

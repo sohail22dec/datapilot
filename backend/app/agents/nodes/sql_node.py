@@ -1,8 +1,5 @@
-import logging
 from app.agents.state import AgentState
 from app.tools.db_tool import execute_db_query
-
-logger = logging.getLogger(__name__)
 
 
 def sql_node(state: AgentState) -> dict:
@@ -45,7 +42,6 @@ def sql_node(state: AgentState) -> dict:
 
     except Exception as e:
         error_msg = str(e)
-        logger.warning(f"Database query execution error in sql_node: {error_msg}")
         return {
             "query_results": None,
             "columns": None,
