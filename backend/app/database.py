@@ -8,12 +8,13 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Initialize SQLAlchemy Engine with connection pooling and stale connection detection
+# Initialize SQLAlchemy Engine with tuned persistent connection pooling
 engine = create_engine(
     settings.DATABASE_URL,
     pool_size=5,
     max_overflow=10,
-    pool_timeout=30,
+    pool_timeout=15,
+    pool_recycle=1800,
     pool_pre_ping=True,
 )
 
@@ -34,6 +35,16 @@ EXCLUDED_SCHEMAS = {
     "pg_catalog", "information_schema", "supabase_functions",
     "pg_toast", "extensions"
 }
+
+
+def warm_database_pool() -> None:
+    """Pre-warms the database TCP/SSL connection pool on server boot to avoid cold-start delays."""
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1;"))
+        logger.info("Supabase database connection pool pre-warmed successfully.")
+    except Exception as e:
+        logger.warning(f"Database pool pre-warming check failed: {e}")
 
 
 def validate_read_only_sql(sql_query: str) -> str:
@@ -92,8 +103,7 @@ def get_database_schema(force_refresh: bool = False) -> str:
                 SELECT 
                     c.table_name,
                     c.column_name,
-                    c.data_type,
-                    c.is_nullable
+                    c.data_type
                 FROM information_schema.columns c
                 JOIN information_schema.tables t 
                     ON c.table_schema = t.table_schema 
@@ -109,8 +119,7 @@ def get_database_schema(force_refresh: bool = False) -> str:
                 SELECT
                     tc.table_name AS source_table,
                     kcu.column_name AS source_column,
-                    ccu.table_name AS target_table,
-                    ccu.column_name AS target_column
+                    ccu.table_name AS target_table
                 FROM information_schema.table_constraints AS tc
                 JOIN information_schema.key_column_usage AS kcu
                     ON tc.constraint_name = kcu.constraint_name
@@ -123,11 +132,11 @@ def get_database_schema(force_refresh: bool = False) -> str:
             """)
             fk_result = conn.execute(fk_query).fetchall()
 
-            # Map foreign keys for quick lookup
+            # Map foreign keys
             fk_map: Dict[str, str] = {}
             for row in fk_result:
                 key = f"{row.source_table}.{row.source_column}"
-                fk_map[key] = f"REFERENCES {row.target_table}({row.target_column})"
+                fk_map[key] = f"->{row.target_table}"
 
             # Group columns by table
             tables: Dict[str, List[str]] = {}
@@ -139,9 +148,7 @@ def get_database_schema(force_refresh: bool = False) -> str:
                     tables[tbl] = []
                 
                 fk_ref = fk_map.get(f"{tbl}.{row.column_name}", "")
-                col_def = f"{row.column_name} {row.data_type.upper()}"
-                if fk_ref:
-                    col_def += f" {fk_ref}"
+                col_def = f"{row.column_name}{fk_ref}"
                 tables[tbl].append(col_def)
 
             if not tables:
@@ -149,7 +156,7 @@ def get_database_schema(force_refresh: bool = False) -> str:
             else:
                 schema_lines = []
                 for tbl, cols in tables.items():
-                    schema_lines.append(f"Table: {tbl} ({', '.join(cols)})")
+                    schema_lines.append(f"{tbl}({', '.join(cols)})")
                 schema_str = "\n".join(schema_lines)
 
             _cached_schema = schema_str
@@ -175,7 +182,7 @@ def get_schema_metadata() -> Dict[str, Any]:
         }
 
 
-def execute_read_only_query(sql_query: str, max_rows: int = 100) -> Dict[str, Any]:
+def execute_read_only_query(sql_query: str, max_rows: int = 50) -> Dict[str, Any]:
     """
     Executes a read-only SQL query against Supabase inside a protected read-only transaction.
     Returns column names, row dictionaries, row count, and execution time in milliseconds.
@@ -187,8 +194,8 @@ def execute_read_only_query(sql_query: str, max_rows: int = 100) -> Dict[str, An
         with engine.connect() as conn:
             # Enforce read-only at session level
             conn.execute(text("SET TRANSACTION READ ONLY;"))
-            # Set 5-second query timeout
-            conn.execute(text("SET statement_timeout = '5000ms';"))
+            # Set 4-second query timeout
+            conn.execute(text("SET statement_timeout = '4000ms';"))
 
             result = conn.execute(text(cleaned_sql))
             columns = list(result.keys())
