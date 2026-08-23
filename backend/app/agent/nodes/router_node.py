@@ -4,7 +4,7 @@ from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.config import settings
-from app.agents.state import AgentState
+from app.agent.state import AgentState
 from app.tools.schema_tool import get_schema_context
 from app.guardrails import sanitize_and_validate_input
 

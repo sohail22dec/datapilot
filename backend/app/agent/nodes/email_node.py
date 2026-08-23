@@ -1,8 +1,5 @@
-import logging
-from app.agents.state import AgentState
+from app.agent.state import AgentState
 from app.tools.email_tool import draft_email_action
-
-logger = logging.getLogger(__name__)
 
 
 def email_node(state: AgentState) -> dict:
@@ -27,8 +24,6 @@ def email_node(state: AgentState) -> dict:
     else:
         campaign_type = "general_announcement"
         action_title = "Customer Announcement"
-
-    logger.info(f"Email node drafting action payload: {campaign_type}")
 
     payload = draft_email_action(
         campaign_type=campaign_type,

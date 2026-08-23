@@ -4,7 +4,8 @@ from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage
 
 from app.config import settings
-from app.agents.state import AgentState
+from app.agent.state import AgentState
+from app.guardrails import sanitize_and_validate_output
 
 
 synthesis_llm = ChatGroq(
@@ -194,8 +195,17 @@ def synthesis_node(state: AgentState) -> dict:
 
     chart_trace = f"📈 [Synthesis] Configured {chart_config['type']} chart ({chart_config['title']})" if chart_config else "📊 [Synthesis] Formatted executive summary"
 
+    # Apply Layer-3 Output Guardrail (Secret Redaction, Stack Trace Scrubbing, Number Grounding)
+    output_guard_outcome = sanitize_and_validate_output(
+        text=final_answer,
+        rows=rows,
+        metrics=metrics,
+        has_data=bool(rows),
+    )
+    clean_final_answer = output_guard_outcome.sanitized_output
+
     return {
-        "final_response": final_answer,
+        "final_response": clean_final_answer,
         "chart_config": chart_config,
         "agent_thought_trace": [chart_trace],
     }

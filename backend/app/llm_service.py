@@ -3,9 +3,9 @@ from typing import Any, AsyncGenerator, Dict, Optional
 
 from app.config import settings
 from app.cache import query_cache
-from app.agents.graph import agent_graph, run_agent_workflow
-from app.agents.state import AgentState
-from app.agents.nodes.synthesis_node import extract_text
+from app.agent.graph import agent_graph, run_agent_workflow
+from app.agent.state import AgentState
+from app.agent.nodes.synthesis_node import extract_text
 from app.schemas import ChatResponse, ChartConfig
 
 

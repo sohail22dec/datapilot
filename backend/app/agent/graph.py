@@ -1,7 +1,7 @@
 from langgraph.graph import StateGraph, START, END
 
-from app.agents.state import AgentState
-from app.agents.nodes import (
+from app.agent.state import AgentState
+from app.agent.nodes import (
     router_node,
     sql_node,
     heal_node,

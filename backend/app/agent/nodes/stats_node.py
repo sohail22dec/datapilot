@@ -1,9 +1,5 @@
-import logging
-from app.agents.state import AgentState
+from app.agent.state import AgentState
 from app.tools.python_tool import execute_python_stats
-
-logger = logging.getLogger(__name__)
-
 
 def stats_node(state: AgentState) -> dict:
     """
@@ -46,7 +42,6 @@ def stats_node(state: AgentState) -> dict:
             metric_name = "profit_margin"
             badge = "Analytical Summary"
 
-    logger.info(f"Stats node executing metric calculation: {metric_name}")
     computed = execute_python_stats(metric_name, rows)
 
     trace_msg = f"🧮 [Stats Engine] Computed {badge} across {len(rows)} data points"

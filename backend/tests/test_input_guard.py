@@ -6,7 +6,7 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from app.guardrails import sanitize_and_validate_input, sanitize_user_input
-from app.agents.graph import run_agent_workflow
+from app.agent.graph import run_agent_workflow
 
 
 def test_legitimate_queries_with_sensitive_words():
