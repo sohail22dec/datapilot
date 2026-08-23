@@ -3,6 +3,7 @@ services:
   # DataPilot FastAPI Backend Service (Python 3.12 + LangGraph + uv)
   # ----------------------------------------------------------------------------
   backend:
+    image: ${BACKEND_IMAGE:-datapilot-backend:latest}
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -14,7 +15,7 @@ services:
       - ./backend/.env
     environment:
       - PORT=8000
-      - ENVIRONMENT=development
+      - ENVIRONMENT=production
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
       interval: 15s
@@ -28,6 +29,7 @@ services:
   # DataPilot Next.js 16 Frontend Service (Standalone + React 19 + Tailwind v4)
   # ----------------------------------------------------------------------------
   frontend:
+    image: ${FRONTEND_IMAGE:-datapilot-frontend:latest}
     build:
       context: ./frontend
       dockerfile: Dockerfile
