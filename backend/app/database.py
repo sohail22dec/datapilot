@@ -22,13 +22,6 @@ engine = create_engine(
 _cached_schema: Optional[str] = None
 _cached_tables_info: Optional[List[Dict[str, Any]]] = None
 
-# Dangerous SQL keywords that modify schema or data
-FORBIDDEN_SQL_KEYWORDS = {
-    "DROP", "DELETE", "UPDATE", "INSERT", "ALTER", "TRUNCATE",
-    "GRANT", "REVOKE", "EXEC", "EXECUTE", "CREATE", "REPLACE",
-    "MERGE", "UPSERT", "LOCK", "CALL"
-}
-
 # Supabase internal schemas to ignore
 EXCLUDED_SCHEMAS = {
     "auth", "storage", "graphql", "realtime", "vault",
@@ -49,41 +42,15 @@ def warm_database_pool() -> None:
 
 def validate_read_only_sql(sql_query: str) -> str:
     """
-    Validates that a SQL query is strictly a read-only SELECT or WITH statement.
-    Removes markdown code fences and returns the clean SQL string.
-    Raises ValueError if unsafe statements are detected.
+    Validates that a SQL query is strictly read-only and safe via the centralized SQL Guardrail.
+    Raises ValueError if unsafe statements or unauthorized schemas are detected.
     """
-    cleaned_sql = sql_query.strip()
+    from app.guardrails.sql_guard import validate_and_sanitize_sql
     
-    # Strip markdown code fences if present (e.g. ```sql ... ```)
-    if cleaned_sql.startswith("```"):
-        cleaned_sql = re.sub(r"^```(?:sql)?\s*", "", cleaned_sql, flags=re.IGNORECASE)
-        cleaned_sql = re.sub(r"\s*```$", "", cleaned_sql)
-        cleaned_sql = cleaned_sql.strip()
-
-    # Remove SQL comments for security analysis
-    sql_no_comments = re.sub(r"--.*$", "", cleaned_sql, flags=re.MULTILINE)
-    sql_no_comments = re.sub(r"/\*.*?\*/", "", sql_no_comments, flags=re.DOTALL).strip()
-
-    if not sql_no_comments:
-        raise ValueError("SQL query cannot be empty.")
-
-    # Must start with SELECT or WITH
-    upper_sql = sql_no_comments.upper()
-    if not (upper_sql.startswith("SELECT") or upper_sql.startswith("WITH")):
-        raise ValueError("Only SELECT or WITH (CTE) read-only queries are permitted.")
-
-    # Reject forbidden mutating keywords as standalone tokens
-    for keyword in FORBIDDEN_SQL_KEYWORDS:
-        if re.search(rf"\b{keyword}\b", upper_sql):
-            raise ValueError(f"Forbidden statement keyword detected: '{keyword}'. Only read-only queries are allowed.")
-
-    # Reject multiple query chaining via semicolon
-    statements = [stmt.strip() for stmt in sql_no_comments.split(";") if stmt.strip()]
-    if len(statements) > 1:
-        raise ValueError("Multiple SQL statements chained with semicolons are not permitted.")
-
-    return cleaned_sql
+    outcome = validate_and_sanitize_sql(sql_query)
+    if not outcome.is_valid:
+        raise ValueError(outcome.violation_reason)
+    return outcome.sanitized_sql
 
 
 def get_database_schema(force_refresh: bool = False) -> str:

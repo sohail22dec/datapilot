@@ -1,5 +1,3 @@
-import logging
-import re
 import time
 from datetime import date, datetime
 from decimal import Decimal
@@ -9,15 +7,8 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.database import engine
+from app.guardrails.sql_guard import validate_and_sanitize_sql
 
-logger = logging.getLogger(__name__)
-
-# Dangerous keywords that modify schema or data
-FORBIDDEN_SQL_KEYWORDS = {
-    "DROP", "DELETE", "UPDATE", "INSERT", "ALTER", "TRUNCATE",
-    "GRANT", "REVOKE", "EXEC", "EXECUTE", "CREATE", "REPLACE",
-    "MERGE", "UPSERT", "LOCK", "CALL"
-}
 
 
 def sanitize_row_values(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -45,42 +36,15 @@ def sanitize_row_values(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return sanitized
 
 
-def validate_read_only_sql(sql_query: str) -> str:
+def validate_read_only_sql(sql_query: str, default_limit: int = 50, max_limit: int = 100) -> str:
     """
-    Validates that a SQL query is strictly a read-only SELECT or WITH statement.
-    Removes markdown code fences and returns the clean SQL string.
-    Raises ValueError if unsafe statements are detected.
+    Validates, sanitizes, and auto-limits a SQL query via the centralized SQL Guardrail.
+    Raises ValueError if unsafe mutating statements or unauthorized schemas are detected.
     """
-    cleaned_sql = sql_query.strip()
-
-    # Strip markdown code fences if present (e.g. ```sql ... ```)
-    if cleaned_sql.startswith("```"):
-        cleaned_sql = re.sub(r"^```(?:sql)?\s*", "", cleaned_sql, flags=re.IGNORECASE)
-        cleaned_sql = re.sub(r"\s*```$", "", cleaned_sql)
-        cleaned_sql = cleaned_sql.strip()
-
-    # Remove SQL comments for security analysis
-    sql_no_comments = re.sub(r"--.*$", "", cleaned_sql, flags=re.MULTILINE)
-    sql_no_comments = re.sub(r"/\*.*?\*/", "", sql_no_comments, flags=re.DOTALL).strip()
-
-    if not sql_no_comments:
-        raise ValueError("SQL query cannot be empty.")
-
-    upper_sql = sql_no_comments.upper()
-    if not (upper_sql.startswith("SELECT") or upper_sql.startswith("WITH")):
-        raise ValueError("Only SELECT or WITH (CTE) read-only queries are permitted.")
-
-    # Reject forbidden mutating keywords as standalone tokens
-    for keyword in FORBIDDEN_SQL_KEYWORDS:
-        if re.search(rf"\b{keyword}\b", upper_sql):
-            raise ValueError(f"Forbidden statement keyword detected: '{keyword}'. Only read-only queries are allowed.")
-
-    # Reject multiple query chaining via semicolon
-    statements = [stmt.strip() for stmt in sql_no_comments.split(";") if stmt.strip()]
-    if len(statements) > 1:
-        raise ValueError("Multiple SQL statements chained with semicolons are not permitted.")
-
-    return cleaned_sql
+    outcome = validate_and_sanitize_sql(sql_query, default_limit=default_limit, max_limit=max_limit)
+    if not outcome.is_valid:
+        raise ValueError(outcome.violation_reason)
+    return outcome.sanitized_sql
 
 
 def execute_db_query(sql_query: str, max_rows: int = 100) -> Dict[str, Any]:
@@ -117,5 +81,4 @@ def execute_db_query(sql_query: str, max_rows: int = 100) -> Dict[str, Any]:
     except SQLAlchemyError as e:
         execution_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
         error_msg = str(e)
-        logger.error(f"SQL execution error ({execution_time_ms}ms): {error_msg}")
         raise RuntimeError(f"Database query execution failed: {error_msg}") from e
