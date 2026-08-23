@@ -84,7 +84,19 @@ datapilot/
 │   │   └── chat.ts               # TypeScript data models (Message, ChartConfig, Conversation)
 │   ├── package.json              # Frontend scripts & dependencies
 │   ├── pnpm-lock.yaml            # pnpm lockfile
-│   └── tsconfig.json             # TypeScript configuration
+│   ├── tsconfig.json             # TypeScript configuration
+│   ├── Dockerfile                # 3-stage Next.js 16 standalone image
+│   └── .dockerignore             # Frontend Docker ignore list
+│
+├── .github/                      # GitHub Actions automation workflows
+│   └── workflows/
+│       ├── ci.yml                # CI: uv sync + pytest, pnpm lint + build, Docker checks
+│       └── cd.yml                # CD: AWS ECR container push & ECS Fargate deployment
+│
+├── deploy/                       # Cloud deployment configurations & guides
+│   └── aws/
+│       ├── task-definition.json  # Amazon ECS Fargate task definition
+│       └── README.md             # AWS setup & deployment guide
 │
 ├── specs/                        # Architecture & design specifications
 │   ├── 01-datapilot-ui-design.md # UI design system & token specifications
@@ -92,6 +104,8 @@ datapilot/
 │   ├── 03_foundation_tools_state_cache.md # Tools suite, caching & AgentState
 │   └── 04_langgraph_nodes_and_graph.md    # LangGraph state machine & nodes
 │
+├── docker-compose.yml            # Multi-container orchestration (FastAPI + Next.js)
+├── .env.example                  # Environment configuration template
 ├── AGENTS.md                     # Agent guidelines (this file)
 └── README.md                     # Project documentation & setup guide
 ```
@@ -118,6 +132,16 @@ datapilot/
   - Run development server: `pnpm dev`
   - Build project: `pnpm build`
   - Linting: `pnpm lint`
+
+### 3. Containerization: **Docker & Docker Compose**
+- Multi-container orchestration: `docker compose up --build`
+- Backend runs at `http://localhost:8000` (Healthcheck: `http://localhost:8000/health`)
+- Frontend runs at `http://localhost:3000`
+
+### 4. CI/CD & AWS Deployment
+- **Continuous Integration (`.github/workflows/ci.yml`)**: Runs `pytest` on Python 3.12, `pnpm lint` + `pnpm build` on Node 22, and builds Docker images on every PR/push.
+- **Continuous Deployment (`.github/workflows/cd.yml`)**: On merge to `main`, pushes production images to Amazon ECR and updates the Amazon ECS Fargate task definition.
+
 
 ---
 
