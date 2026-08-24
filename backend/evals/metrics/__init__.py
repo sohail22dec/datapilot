@@ -16,6 +16,17 @@ from .healing_metrics import (
     HealingAttemptLog,
     ErrorTypeMetric,
 )
+from .stats_action_metrics import (
+    StatsActionMetricsCalculator,
+    StatsEvaluationResultItem,
+    StatsActionSummary,
+)
+from .security_metrics import (
+    SecurityMetricsCalculator,
+    SecurityEvaluationResultItem,
+    SecurityEvaluationSummary,
+    SecurityCategoryMetric,
+)
 
 __all__ = [
     "ClassificationMetricsCalculator",
@@ -30,4 +41,11 @@ __all__ = [
     "HealingEvaluationSummary",
     "HealingAttemptLog",
     "ErrorTypeMetric",
+    "StatsActionMetricsCalculator",
+    "StatsEvaluationResultItem",
+    "StatsActionSummary",
+    "SecurityMetricsCalculator",
+    "SecurityEvaluationResultItem",
+    "SecurityEvaluationSummary",
+    "SecurityCategoryMetric",
 ]
