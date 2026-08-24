@@ -1,9 +1,8 @@
 import json
-import os
 import sys
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import List
 
 # Add backend directory to Python path
 BACKEND_DIR = Path(__file__).resolve().parent.parent
@@ -43,7 +42,6 @@ def evaluate_single_sql_case(item: dict, valid_tables: List[str]) -> SQLEvaluati
     category = item.get("category", "general")
     question = item["question"]
     ground_truth_sql = item["ground_truth_sql"]
-    expected_tables = item.get("expected_tables", [])
 
     # 1. Execute Ground Truth SQL on DB
     expected_rows = None

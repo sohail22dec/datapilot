@@ -9,6 +9,13 @@ from .sql_metrics import (
     SQLEvaluationSummary,
     DifficultyMetric,
 )
+from .healing_metrics import (
+    HealingMetricsCalculator,
+    HealingEvaluationResultItem,
+    HealingEvaluationSummary,
+    HealingAttemptLog,
+    ErrorTypeMetric,
+)
 
 __all__ = [
     "ClassificationMetricsCalculator",
@@ -18,4 +25,9 @@ __all__ = [
     "SQLEvaluationResultItem",
     "SQLEvaluationSummary",
     "DifficultyMetric",
+    "HealingMetricsCalculator",
+    "HealingEvaluationResultItem",
+    "HealingEvaluationSummary",
+    "HealingAttemptLog",
+    "ErrorTypeMetric",
 ]

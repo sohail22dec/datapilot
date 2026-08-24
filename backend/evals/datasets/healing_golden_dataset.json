@@ -1,0 +1,182 @@
+[
+  {
+    "id": "heal_01",
+    "error_type": "column_hallucination",
+    "question": "List customer names and emails for customers in Bangalore",
+    "broken_sql": "SELECT customer_name, email FROM customers WHERE city = 'Bangalore';",
+    "simulated_error": "column \"customer_name\" does not exist",
+    "ground_truth_sql": "SELECT first_name, last_name, email FROM customers WHERE LOWER(city) = 'bangalore' LIMIT 50;",
+    "description": "Hallucinated customer_name column instead of first_name and last_name"
+  },
+  {
+    "id": "heal_02",
+    "error_type": "column_hallucination",
+    "question": "Show total order amount and customer ID for order 5",
+    "broken_sql": "SELECT user_id, order_total FROM orders WHERE order_id = 5;",
+    "simulated_error": "column \"user_id\" does not exist",
+    "ground_truth_sql": "SELECT customer_id, discount_amount, shipping_cost FROM orders WHERE order_id = 5;",
+    "description": "Hallucinated user_id and order_total on orders table"
+  },
+  {
+    "id": "heal_03",
+    "error_type": "column_hallucination",
+    "question": "List products with price and available stock",
+    "broken_sql": "SELECT name, item_price, inventory_count FROM products LIMIT 10;",
+    "simulated_error": "column \"item_price\" does not exist",
+    "ground_truth_sql": "SELECT name, price, stock_quantity FROM products LIMIT 10;",
+    "description": "Hallucinated item_price and inventory_count instead of price and stock_quantity"
+  },
+  {
+    "id": "heal_04",
+    "error_type": "column_hallucination",
+    "question": "Show payments with customer name and payment method",
+    "broken_sql": "SELECT p.payment_id, c.full_name, p.payment_method FROM payments p JOIN orders o ON p.order_id = o.order_id JOIN customers c ON o.customer_id = c.customer_id LIMIT 50;",
+    "simulated_error": "column c.full_name does not exist",
+    "ground_truth_sql": "SELECT p.payment_id, c.first_name, c.last_name, p.payment_method FROM payments p JOIN orders o ON p.order_id = o.order_id JOIN customers c ON o.customer_id = c.customer_id LIMIT 50;",
+    "description": "Hallucinated full_name on joined customer table"
+  },
+  {
+    "id": "heal_05",
+    "error_type": "column_hallucination",
+    "question": "Find products belonging to category ID 2",
+    "broken_sql": "SELECT product_name, category FROM products WHERE category = 2;",
+    "simulated_error": "column \"product_name\" does not exist",
+    "ground_truth_sql": "SELECT name, category_id FROM products WHERE category_id = 2 LIMIT 50;",
+    "description": "Hallucinated product_name and category instead of name and category_id"
+  },
+  {
+    "id": "heal_06",
+    "error_type": "column_hallucination",
+    "question": "Show refund amount and return description",
+    "broken_sql": "SELECT refund_amount, return_reason FROM returns LIMIT 50;",
+    "simulated_error": "column \"return_reason\" does not exist",
+    "ground_truth_sql": "SELECT refund_amount, reason FROM returns LIMIT 50;",
+    "description": "Hallucinated return_reason instead of reason"
+  },
+  {
+    "id": "heal_07",
+    "error_type": "table_hallucination",
+    "question": "List all registered customers from India",
+    "broken_sql": "SELECT first_name, last_name, email FROM users WHERE country = 'India';",
+    "simulated_error": "relation \"users\" does not exist",
+    "ground_truth_sql": "SELECT first_name, last_name, email FROM customers WHERE LOWER(country) = 'india' LIMIT 50;",
+    "description": "Hallucinated table 'users' instead of 'customers'"
+  },
+  {
+    "id": "heal_08",
+    "error_type": "table_hallucination",
+    "question": "Show all payments with amount greater than 1000",
+    "broken_sql": "SELECT payment_id, amount FROM transactions WHERE amount > 1000;",
+    "simulated_error": "relation \"transactions\" does not exist",
+    "ground_truth_sql": "SELECT payment_id, amount FROM payments WHERE amount > 1000 LIMIT 50;",
+    "description": "Hallucinated table 'transactions' instead of 'payments'"
+  },
+  {
+    "id": "heal_09",
+    "error_type": "table_hallucination",
+    "question": "List items and product prices in the catalog",
+    "broken_sql": "SELECT item_id, title, cost FROM items LIMIT 50;",
+    "simulated_error": "relation \"items\" does not exist",
+    "ground_truth_sql": "SELECT product_id, name, price FROM products LIMIT 50;",
+    "description": "Hallucinated table 'items' instead of 'products'"
+  },
+  {
+    "id": "heal_10",
+    "error_type": "table_hallucination",
+    "question": "Show product categories and names",
+    "broken_sql": "SELECT category_name FROM product_categories LIMIT 50;",
+    "simulated_error": "relation \"product_categories\" does not exist",
+    "ground_truth_sql": "SELECT name FROM categories LIMIT 50;",
+    "description": "Hallucinated table 'product_categories' instead of 'categories'"
+  },
+  {
+    "id": "heal_11",
+    "error_type": "missing_group_by",
+    "question": "Count total orders by status along with customer ID",
+    "broken_sql": "SELECT status, customer_id, COUNT(*) AS order_count FROM orders GROUP BY status;",
+    "simulated_error": "column \"orders.customer_id\" must appear in the GROUP BY clause or be used in an aggregate function",
+    "ground_truth_sql": "SELECT status, customer_id, COUNT(*) AS order_count FROM orders GROUP BY status, customer_id LIMIT 50;",
+    "description": "Non-aggregated column customer_id omitted from GROUP BY"
+  },
+  {
+    "id": "heal_12",
+    "error_type": "missing_group_by",
+    "question": "Show total spending by city and country",
+    "broken_sql": "SELECT c.city, c.country, SUM(p.amount) AS total_spending FROM customers c JOIN orders o ON c.customer_id = o.customer_id JOIN payments p ON o.order_id = p.order_id GROUP BY c.city LIMIT 50;",
+    "simulated_error": "column \"c.country\" must appear in the GROUP BY clause or be used in an aggregate function",
+    "ground_truth_sql": "SELECT c.city, c.country, SUM(p.amount) AS total_spending FROM customers c JOIN orders o ON c.customer_id = o.customer_id JOIN payments p ON o.order_id = p.order_id GROUP BY c.city, c.country LIMIT 50;",
+    "description": "Column country omitted from GROUP BY clause in multi-column aggregation"
+  },
+  {
+    "id": "heal_13",
+    "error_type": "missing_group_by",
+    "question": "Show product category name and average product price",
+    "broken_sql": "SELECT c.name AS category_name, p.name AS product_name, AVG(p.price) AS avg_price FROM categories c JOIN products p ON c.category_id = p.category_id GROUP BY c.name;",
+    "simulated_error": "column \"p.name\" must appear in the GROUP BY clause or be used in an aggregate function",
+    "ground_truth_sql": "SELECT c.name AS category_name, AVG(p.price) AS avg_price FROM categories c JOIN products p ON c.category_id = p.category_id GROUP BY c.name;",
+    "description": "Superfluous non-aggregated product name in category summary"
+  },
+  {
+    "id": "heal_14",
+    "error_type": "type_mismatch",
+    "question": "Find all orders placed in 2024",
+    "broken_sql": "SELECT order_id, customer_id, order_date FROM orders WHERE order_date = 2024 LIMIT 50;",
+    "simulated_error": "operator does not exist: timestamp without time zone = integer",
+    "ground_truth_sql": "SELECT order_id, customer_id, order_date FROM orders WHERE EXTRACT(YEAR FROM order_date) = 2024 LIMIT 50;",
+    "description": "Timestamp equality comparison with raw integer year"
+  },
+  {
+    "id": "heal_15",
+    "error_type": "type_mismatch",
+    "question": "Show payments where amount is zero",
+    "broken_sql": "SELECT payment_id, amount FROM payments WHERE amount = 'none' LIMIT 50;",
+    "simulated_error": "invalid input syntax for type numeric: \"none\"",
+    "ground_truth_sql": "SELECT payment_id, amount FROM payments WHERE amount = 0 OR amount IS NULL LIMIT 50;",
+    "description": "String literal comparison against numeric amount column"
+  },
+  {
+    "id": "heal_16",
+    "error_type": "type_mismatch",
+    "question": "List customers registered after January 1st 2023",
+    "broken_sql": "SELECT customer_id, first_name, last_name, signup_date FROM customers WHERE signup_date > 20230101 LIMIT 50;",
+    "simulated_error": "operator does not exist: date > integer",
+    "ground_truth_sql": "SELECT customer_id, first_name, last_name, signup_date FROM customers WHERE signup_date > '2023-01-01' LIMIT 50;",
+    "description": "Date comparison with raw integer literal instead of ISO string"
+  },
+  {
+    "id": "heal_17",
+    "error_type": "syntax_join_predicate",
+    "question": "Show customer first names and order IDs",
+    "broken_sql": "SELECT c.first_name, o.order_id FROM customers c JOIN orders o LIMIT 50;",
+    "simulated_error": "syntax error at or near \"LIMIT\"",
+    "ground_truth_sql": "SELECT c.first_name, o.order_id FROM customers c JOIN orders o ON c.customer_id = o.customer_id LIMIT 50;",
+    "description": "JOIN clause missing the ON join predicate"
+  },
+  {
+    "id": "heal_18",
+    "error_type": "syntax_trailing_comma",
+    "question": "List products with price and stock",
+    "broken_sql": "SELECT name, price, stock_quantity, FROM products LIMIT 50;",
+    "simulated_error": "syntax error at or near \"FROM\"",
+    "ground_truth_sql": "SELECT name, price, stock_quantity FROM products LIMIT 50;",
+    "description": "Trailing comma in SELECT column projection"
+  },
+  {
+    "id": "heal_19",
+    "error_type": "syntax_clause_order",
+    "question": "Count completed orders grouped by customer",
+    "broken_sql": "SELECT customer_id, COUNT(*) AS count FROM orders GROUP BY customer_id WHERE status = 'completed' LIMIT 50;",
+    "simulated_error": "syntax error at or near \"WHERE\"",
+    "ground_truth_sql": "SELECT customer_id, COUNT(*) AS count FROM orders WHERE LOWER(status) = 'completed' GROUP BY customer_id LIMIT 50;",
+    "description": "WHERE clause erroneously placed after GROUP BY clause"
+  },
+  {
+    "id": "heal_20",
+    "error_type": "syntax_join_predicate",
+    "question": "Show order item quantities with product names",
+    "broken_sql": "SELECT oi.order_id, p.name, oi.quantity FROM order_items oi INNER JOIN products p LIMIT 50;",
+    "simulated_error": "syntax error at or near \"LIMIT\"",
+    "ground_truth_sql": "SELECT oi.order_id, p.name, oi.quantity FROM order_items oi JOIN products p ON oi.product_id = p.product_id LIMIT 50;",
+    "description": "INNER JOIN missing ON predicate"
+  }
+]
