@@ -120,6 +120,8 @@ jobs:
 
             echo "🐳 [4/5] Starting containers with updated images..."
             docker compose down --remove-orphans 2>/dev/null || true
+            sudo fuser -k 8000/tcp 2>/dev/null || true
+            sudo fuser -k 3000/tcp 2>/dev/null || true
             docker compose up -d --remove-orphans
 
             echo "🧹 [5/5] Cleaning up old images and checking health..."
