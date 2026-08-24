@@ -1,16 +1,15 @@
-# 🚀 AWS EC2 (t3.micro) + Amazon ECR Auto-Deployment Guide
+# 🚀 AWS EC2 (m7i-flex.large) + Amazon ECR Auto-Deployment Guide
 
-This architecture is specially optimized for **AWS `t3.micro` (1 GB RAM)** instances to prevent CPU/RAM crashes during builds while keeping your deployments 100% automated.
+This architecture is optimized for **AWS EC2 (e.g. `m7i-flex.large` or similar)** with **Amazon ECR** to ensure blazing-fast, zero-downtime automated deployments.
 
 ---
 
-## 💡 Why this architecture is best for `t3.micro`
+## 💡 Why this architecture is optimal
 
-- **The Problem with 1 GB RAM:** Next.js and Python compilation require **1.5 GB - 2 GB of RAM**. If you build code directly on a `t3.micro`, the server runs out of memory (OOM) and freezes or crashes your website.
-- **The Solution:** 
-  1. **GitHub Actions (16 GB RAM)** builds the Docker images in the cloud for free.
-  2. **Amazon ECR** stores your ready-to-run images.
-  3. **Your `t3.micro`** only downloads the finished images and starts them in **under 10 seconds** with **< 5% CPU and ~300 MB RAM**.
+- **Fast & Isolated Builds:** 
+  1. **GitHub Actions (16 GB RAM)** builds the Docker images in the cloud with layer caching.
+  2. **Amazon ECR** stores and versions your ready-to-run images.
+  3. **Your EC2 Instance (`m7i-flex.large`)** simply downloads the finished images and restarts containers in **under 10 seconds** without CPU or build lockups.
 
 ---
 
@@ -23,11 +22,11 @@ This architecture is specially optimized for **AWS `t3.micro` (1 GB RAM)** insta
 [ GitHub Actions Cloud (16 GB RAM) ]
    ├── 1. Runs pytest & builds Next.js
    ├── 2. Builds Docker images & pushes to Amazon ECR
-   └── 3. Connects to EC2 (t3.micro) via SSH
+   └── 3. Connects to EC2 (m7i-flex.large) via SSH
             │
             ▼
-[ AWS EC2 (t3.micro) ]
-   ├── Pulls pre-built images from Amazon ECR (0% build stress)
+[ AWS EC2 (m7i-flex.large) ]
+   ├── Pulls pre-built images from Amazon ECR
    ├── Starts containers:
    │    ├── Frontend (Next.js 16) → http://<EC2-IP>:3000
    │    └── Backend (FastAPI)    → http://<EC2-IP>:8000
@@ -40,14 +39,14 @@ This architecture is specially optimized for **AWS `t3.micro` (1 GB RAM)** insta
 
 ### 1. Create Amazon ECR Repositories (One-Time)
 
-In the AWS Console (or AWS CLI), create two private ECR repositories in your region (e.g. `us-east-1`):
+In the AWS Console (or AWS CLI), create two private ECR repositories in your region (`ap-southeast-2`):
 
 ```bash
 # Create Backend ECR Repository
-aws ecr create-repository --repository-name datapilot-backend --region us-east-1
+aws ecr create-repository --repository-name datapilot-backend --region ap-southeast-2
 
 # Create Frontend ECR Repository
-aws ecr create-repository --repository-name datapilot-frontend --region us-east-1
+aws ecr create-repository --repository-name datapilot-frontend --region ap-southeast-2
 ```
 
 ---
