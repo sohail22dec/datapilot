@@ -116,8 +116,10 @@ export default function Home() {
 
     setIsLoading(true);
 
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+
     try {
-      const response = await fetch("http://localhost:8000/api/chat/stream", {
+      const response = await fetch(`${backendUrl}/api/chat/stream`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -136,13 +138,12 @@ export default function Home() {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
-
       let currentEvent = "";
       let accumulatedText = "";
-      const accumulatedSteps: string[] = ["Analyzing inquiry & schema..."];
+      const accumulatedSteps: string[] = ["🔍 Analyzing Inquiry & Schema"];
 
       while (true) {
-        const { value, done } = await reader.read();
+        const { done, value } = await reader.read();
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
@@ -160,7 +161,7 @@ export default function Home() {
             try {
               const parsed = JSON.parse(rawData);
 
-              if (currentEvent === "step") {
+              if (currentEvent === "step" || parsed.step || parsed.badge) {
                 const stepText = parsed.badge || parsed.step || "Processing...";
                 if (!accumulatedSteps.includes(stepText)) {
                   accumulatedSteps.push(stepText);
@@ -184,7 +185,7 @@ export default function Home() {
                       : c
                   )
                 );
-              } else if (currentEvent === "token") {
+              } else if (currentEvent === "token" || parsed.delta) {
                 const delta = parsed.delta || "";
                 accumulatedText += delta;
 
@@ -205,7 +206,7 @@ export default function Home() {
                       : c
                   )
                 );
-              } else if (currentEvent === "done") {
+              } else if (currentEvent === "done" || parsed.response !== undefined) {
                 setConversations((prev) =>
                   prev.map((c) =>
                     c.id === activeConversationId
@@ -251,7 +252,7 @@ export default function Home() {
                     ? {
                         ...m,
                         content:
-                          "I encountered an issue connecting to the backend service. Please check your backend connection at http://localhost:8000.",
+                          `I encountered an issue connecting to the backend service. Please check your backend connection at ${backendUrl}.`,
                         isStreaming: false,
                       }
                     : m
