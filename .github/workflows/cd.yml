@@ -106,8 +106,9 @@ jobs:
           port: ${{ secrets.EC2_PORT || 22 }}
           script_stop: true
           script: |
-            echo "🚀 [1/5] Navigating to project directory..."
+            echo "🚀 [1/5] Navigating to project directory and pulling latest code..."
             cd /home/${{ secrets.EC2_USERNAME || 'ubuntu' }}/datapilot || exit 1
+            git pull origin main
 
             echo "🔑 [2/5] Authenticating Docker with Amazon ECR..."
             echo "${{ steps.ecr-auth.outputs.password }}" | docker login --username AWS --password-stdin ${{ needs.build-and-push-ecr.outputs.registry }}
