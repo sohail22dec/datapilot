@@ -27,6 +27,14 @@ from .security_metrics import (
     SecurityEvaluationSummary,
     SecurityCategoryMetric,
 )
+from .synthesis_deepeval_metrics import (
+    SynthesisJudgeEvaluator,
+    SynthesisEvaluationResultItem,
+    SynthesisEvaluationSummary,
+    FaithfulnessJudgeOutput,
+    RelevancyJudgeOutput,
+    ExecutiveFormattingJudgeOutput,
+)
 
 __all__ = [
     "ClassificationMetricsCalculator",
@@ -48,4 +56,10 @@ __all__ = [
     "SecurityEvaluationResultItem",
     "SecurityEvaluationSummary",
     "SecurityCategoryMetric",
+    "SynthesisJudgeEvaluator",
+    "SynthesisEvaluationResultItem",
+    "SynthesisEvaluationSummary",
+    "FaithfulnessJudgeOutput",
+    "RelevancyJudgeOutput",
+    "ExecutiveFormattingJudgeOutput",
 ]
