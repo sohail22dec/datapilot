@@ -1,13 +1,10 @@
-import logging
 from pydantic import BaseModel, Field
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.config import settings
-from app.agents.state import AgentState
+from app.agent.state import AgentState
 from app.tools.schema_tool import get_schema_context
-
-logger = logging.getLogger(__name__)
 
 debugger_llm = ChatGoogleGenerativeAI(
     model=settings.GEMINI_MODEL,
@@ -59,8 +56,6 @@ def heal_node(state: AgentState) -> dict:
     retry_count = state.get("retry_count", 0) + 1
     last_error = error_history[-1] if error_history else "Unknown SQL error"
 
-    logger.info(f"Self-healing triggered (attempt {retry_count}/2) for error: {last_error}")
-
     schema_context = get_schema_context()
 
     try:
@@ -76,7 +71,6 @@ def heal_node(state: AgentState) -> dict:
         new_sql = correction.corrected_sql.strip()
         explanation = correction.explanation
     except Exception as e:
-        logger.error(f"Self-healing LLM invocation failed: {e}")
         new_sql = failed_sql
         explanation = f"Healing prompt failed: {str(e)}"
 
