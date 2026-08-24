@@ -45,6 +45,11 @@ jobs:
 
       - name: Run Backend Test Suite (Guardrails & DB Tools)
         run: uv run pytest -v
+        env:
+          DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/datapilot"
+          GEMINI_API_KEY: "placeholder_gemini_key"
+          GEMINI_MODEL: "gemini-2.5-flash-lite"
+          GROQ_API_KEY: "placeholder_groq_key"
 
   # ============================================================================
   # 2. Frontend Quality Gate (Next.js 16 + React 19 + pnpm + TypeScript)

@@ -6,10 +6,10 @@ load_dotenv(override=True)
 
 
 class Settings(BaseSettings):
-    DATABASE_URL: str
-    GEMINI_API_KEY: str
-    GEMINI_MODEL: str
-    GROQ_API_KEY: str
+    DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/datapilot"
+    GEMINI_API_KEY: str = "placeholder_gemini_key"
+    GEMINI_MODEL: str = "gemini-2.5-flash-lite"
+    GROQ_API_KEY: str = "placeholder_groq_key"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
