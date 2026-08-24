@@ -11,8 +11,7 @@ def sql_node(state: AgentState) -> dict:
     4. Captures errors cleanly for self-healing routing.
     """
     current_sql = state.get("sql_query")
-    tables_used = state.get("tables_used", [])
-
+    
     if not current_sql:
         return {
             "query_results": None,

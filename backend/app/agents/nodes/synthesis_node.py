@@ -131,13 +131,23 @@ def synthesis_node(state: AgentState) -> dict:
     action_payload = state.get("action_payload")
     error_history = state.get("error_history", [])
 
-    # Case 1: General Chat / Greeting (Instant 0ms, 0 tokens)
-    if intent == "general_chat":
-        final_answer = direct_resp or "Hello! I am DataPilot, your AI data analyst. How can I help you explore your business metrics today?"
+    # Case 1: General Chat / Policy Violation (Instant 0ms, 0 tokens)
+    if intent in ("general_chat", "policy_violation"):
+        fallback = (
+            "For security and compliance reasons, this inquiry cannot be processed."
+            if intent == "policy_violation"
+            else "Hello! I am DataPilot, your AI data analyst. How can I help you explore your business metrics today?"
+        )
+        final_answer = direct_resp or fallback
+        trace_msg = (
+            "🛡️ [Synthesis] Safety & policy rejection prepared"
+            if intent == "policy_violation"
+            else "📊 [Synthesis] Conversational answer prepared"
+        )
         return {
             "final_response": final_answer,
             "chart_config": None,
-            "agent_thought_trace": ["📊 [Synthesis] Conversational answer prepared"],
+            "agent_thought_trace": [trace_msg],
         }
 
     # Case 2: Query Failed after retries

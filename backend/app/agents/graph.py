@@ -18,12 +18,12 @@ from app.agents.nodes import (
 def route_after_entry(state: AgentState) -> str:
     """
     Evaluates outcome of the Router Node:
-    1. General chat / Identity ➔ synthesis_node (instant return)
+    1. General chat / Identity / Policy violation ➔ synthesis_node (instant return)
     2. Business data query / Statistical analysis / Email action ➔ sql_node (for pure DB execution)
     """
     intent = state.get("intent", "data_query")
 
-    if intent == "general_chat":
+    if intent in ("general_chat", "policy_violation"):
         return "synthesis_node"
 
     return "sql_node"

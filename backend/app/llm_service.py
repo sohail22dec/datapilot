@@ -1,6 +1,4 @@
-import asyncio
 import json
-import logging
 from typing import Any, AsyncGenerator, Dict, Optional
 
 from app.config import settings
@@ -9,8 +7,6 @@ from app.agents.graph import agent_graph, run_agent_workflow
 from app.agents.state import AgentState
 from app.agents.nodes.synthesis_node import extract_text
 from app.schemas import ChatResponse, ChartConfig
-
-logger = logging.getLogger(__name__)
 
 
 def process_chat_query(user_question: str) -> ChatResponse:
@@ -22,15 +18,11 @@ def process_chat_query(user_question: str) -> ChatResponse:
     """
     cached_response = query_cache.get(user_question)
     if cached_response:
-        logger.info(f"Serving query directly from QueryCache: '{user_question}'")
         return ChatResponse(**cached_response)
-
-    logger.info(f"Executing LangGraph agent workflow for: '{user_question}'")
 
     try:
         final_state: AgentState = run_agent_workflow(user_question)
     except Exception as e:
-        logger.error(f"LangGraph execution exception: {e}", exc_info=True)
         return ChatResponse(
             response=f"I encountered an issue processing your request: {str(e)}",
             model=settings.GEMINI_MODEL,
@@ -139,7 +131,6 @@ async def stream_agent_workflow(user_question: str) -> AsyncGenerator[str, None]
                 final_state_output = event["data"].get("output")
 
     except Exception as e:
-        logger.error(f"Error during native LangGraph streaming: {e}", exc_info=True)
         err_msg = f"I encountered an error executing this request: {str(e)}"
         yield f"event: token\ndata: {json.dumps({'delta': err_msg})}\n\n"
         yield f"event: done\ndata: {json.dumps({'response': err_msg, 'sql': None, 'data': None, 'columns': None, 'row_count': 0, 'execution_time_ms': 0.0, 'chart_config': None})}\n\n"
