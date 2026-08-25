@@ -40,7 +40,7 @@ def evaluate_single_synthesis_case(item: dict, evaluator: SynthesisJudgeEvaluato
     state: AgentState = {
         "messages": [],
         "user_question": user_q,
-        "intent": "data_query" if query_results else ("statistical_analysis" if metrics else "general_chat"),
+        "intent": "data_query" if (query_results or columns or item.get("category") == "empty_dataset") else ("statistical_analysis" if metrics else ("email_action" if action_payload else "general_chat")),
         "thought_process": "",
         "direct_response": None,
         "tables_used": [],
