@@ -28,10 +28,22 @@ SECRET_PATTERNS = [
         re.compile(r"\b(?:\d{4}[ -]?){3}\d{4}\b|\b3[47]\d{2}[ -]?\d{6}[ -]?\d{5}\b"),
         "[REDACTED_CREDIT_CARD]",
     ),
-    # Live API Tokens & Keys (e.g. sk-live_..., gsk_..., AIza..., AKIA...)
+    # Groq API Key
+    (
+        "GROQ_API_KEY_LEAK",
+        re.compile(r"\bgsk_[a-zA-Z0-9_\-]{20,}\b"),
+        "[REDACTED_API_KEY]",
+    ),
+    # Gemini API Key
+    (
+        "GEMINI_API_KEY_LEAK",
+        re.compile(r"\bAIza[0-9A-Za-z\-_]{20,}\b"),
+        "[REDACTED_API_KEY]",
+    ),
+    # Live API Tokens & Keys (e.g. sk-live_..., AKIA...)
     (
         "API_TOKEN_LEAK",
-        re.compile(r"\b(?:sk-live_|gsk_|AIza|AKIA)[a-zA-Z0-9_\-]{16,}\b"),
+        re.compile(r"\b(?:sk-live_|AKIA)[a-zA-Z0-9_\-]{16,}\b"),
         "[REDACTED_API_KEY]",
     ),
     # Database Connection URIs

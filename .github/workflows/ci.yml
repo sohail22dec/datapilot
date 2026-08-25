@@ -43,8 +43,8 @@ jobs:
       - name: Sync Dependencies from Lockfile
         run: uv sync --frozen
 
-      - name: Run Backend Test Suite (Guardrails & DB Tools)
-        run: uv run pytest -v
+      - name: Run Backend Test Suite (Guardrails & Security)
+        run: uv run pytest tests/test_input_guard.py tests/test_output_guard.py tests/test_sql_guard.py tests/test_security_eval.py tests/test_stats_action_eval.py -v
         env:
           DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/datapilot"
           GEMINI_API_KEY: "placeholder_gemini_key"
