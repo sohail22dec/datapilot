@@ -57,6 +57,11 @@ RESTRICTED_SCHEMA_PATTERNS = [
         re.compile(r"\binformation_schema\.(user_mappings|applicable_roles|administrable_role_authorizations)\b", re.IGNORECASE),
         "Queries probing security role authorizations in information_schema are restricted.",
     ),
+    (
+        "INTERNAL_EXTENSIONS_AND_REALTIME_RESTRICTED",
+        re.compile(r"\b(supabase_functions|extensions|realtime|graphql|cron|net)\.", re.IGNORECASE),
+        "Queries accessing internal database extensions, functions, GraphQL, and realtime schemas are restricted.",
+    ),
 ]
 
 

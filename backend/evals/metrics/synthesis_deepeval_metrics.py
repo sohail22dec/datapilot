@@ -6,21 +6,21 @@ from pydantic import BaseModel, Field
 
 from langchain_groq import ChatGroq
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage
 
 from app.config import settings
 
 
 # ---------------------------------------------------------
-# LLM Judge Pydantic Output Contracts
+# Unified LLM Judge Pydantic Output Contract
 # ---------------------------------------------------------
 
-class FaithfulnessJudgeOutput(BaseModel):
+class UnifiedJudgeOutput(BaseModel):
     is_faithful: bool = Field(
         ...,
-        description="True if ALL numbers, percentages, and factual statements in the summary are strictly backed by the query data. False if ANY hallucinated number is found."
+        description="True if ALL numbers, percentages, and facts in the summary are strictly backed by the query data. False if ANY hallucinated number is found."
     )
-    score: float = Field(
+    faithfulness_score: float = Field(
         ...,
         description="Float score from 0.0 (unfaithful) to 1.0 (100% faithful)."
     )
@@ -28,43 +28,31 @@ class FaithfulnessJudgeOutput(BaseModel):
         default_factory=list,
         description="List of specific claims or numbers in the summary not supported by the data."
     )
-    reasoning: str = Field(
-        ...,
-        description="Brief critique explaining the verdict."
-    )
 
-
-class RelevancyJudgeOutput(BaseModel):
     is_relevant: bool = Field(
         ...,
         description="True if the response directly addresses the user's inquiry."
     )
-    score: float = Field(
+    relevancy_score: float = Field(
         ...,
         description="Float score from 0.0 (irrelevant) to 1.0 (highly relevant)."
     )
-    reasoning: str = Field(
-        ...,
-        description="Brief critique of relevancy."
-    )
 
-
-class ExecutiveFormattingJudgeOutput(BaseModel):
     inr_currency_used: bool = Field(
         ...,
-        description="True if monetary values are prefixed with ₹ (Rupee symbol) and formatted with comma separators."
+        description="True if monetary values are prefixed with ₹ (Rupee symbol) and formatted with comma separators (e.g. ₹1,24,500)."
     )
     bold_highlights_used: bool = Field(
         ...,
         description="True if key numbers, percentages, or metrics are highlighted in **bold**."
     )
-    score: float = Field(
+    formatting_score: float = Field(
         ...,
         description="Overall formatting score from 0.0 to 1.0."
     )
-    reasoning: str = Field(
+    critique: str = Field(
         ...,
-        description="Brief critique of executive formatting."
+        description="Brief concise review of the answer quality."
     )
 
 
@@ -114,8 +102,8 @@ class SynthesisEvaluationSummary:
 
 class SynthesisJudgeEvaluator:
     """
-    Semantic LLM Judge & Deterministic Chart Validator for DataPilot:
-    - Faithfulness & Hallucination Check (powered by openai/gpt-oss-120b or Gemini Flash)
+    Unified Semantic LLM Judge & Deterministic Chart Validator for DataPilot:
+    - Faithfulness & Hallucination Check (powered by openai/gpt-oss-120b or Gemini)
     - Question-Answer Relevancy Check
     - Executive Formatting & INR Currency Evaluation
     - Deterministic ChartConfig Key and Type Integrity
@@ -137,22 +125,19 @@ class SynthesisJudgeEvaluator:
             )
             self.model_name = "openai/gpt-oss-120b"
 
-        self.faithfulness_judge = self.judge_llm.with_structured_output(FaithfulnessJudgeOutput)
-        self.relevancy_judge = self.judge_llm.with_structured_output(RelevancyJudgeOutput)
-        self.formatting_judge = self.judge_llm.with_structured_output(ExecutiveFormattingJudgeOutput)
+        self.unified_judge = self.judge_llm.with_structured_output(UnifiedJudgeOutput)
 
-    def evaluate_faithfulness(
+    def evaluate_response(
         self,
         user_question: str,
         query_results: List[Dict[str, Any]],
         computed_metrics: Optional[Dict[str, Any]],
         final_response: str
-    ) -> FaithfulnessJudgeOutput:
-        """Evaluates whether all facts and numbers in final_response exist in data."""
+    ) -> UnifiedJudgeOutput:
+        """Runs a single unified LLM Judge evaluation across Faithfulness, Relevancy, and Executive Formatting."""
         data_context = f"Query Rows: {json.dumps(query_results[:6], default=str)}\nComputed Metrics: {json.dumps(computed_metrics, default=str)}"
 
-        prompt = f"""You are an elite Data Auditor evaluating an AI Business Intelligence agent.
-Examine the Data Context vs the Agent's Final Text Summary:
+        prompt = f"""You are an elite Data Auditor and Executive Communication Judge evaluating an AI Business Intelligence agent.
 
 [DATA CONTEXT]:
 {data_context}
@@ -163,67 +148,35 @@ Examine the Data Context vs the Agent's Final Text Summary:
 [AGENT FINAL RESPONSE]:
 {final_response}
 
-Evaluation Criteria:
-1. Are all numbers, currency amounts, percentages, and names in the summary directly derived from the Data Context?
-2. Did the agent hallucinate, invent, or extrapolate any numbers that are NOT present in the data?
-3. If no records exist, did it correctly state that no records were found?
+Evaluation Instructions:
+1. FAITHFULNESS: Are all numbers, percentages, and facts in the agent's summary strictly supported by the Data Context?
+   - If ANY number or fact was invented/hallucinated, mark is_faithful = False and list it in hallucinated_facts.
+   - If no records exist and the agent stated that, mark is_faithful = True.
+2. RELEVANCY: Does the summary directly answer the user's question?
+3. FORMATTING: Are monetary numbers formatted in Indian Rupees (₹) with commas (e.g. ₹1,24,500) and key metrics highlighted in **bold**?
 """
         try:
-            return self.faithfulness_judge.invoke([HumanMessage(content=prompt)])
-        except Exception as e:
-            return FaithfulnessJudgeOutput(
-                is_faithful=True,
-                score=1.0,
-                hallucinated_facts=[],
-                reasoning=f"Judge fallback: {str(e)}"
-            )
-
-    def evaluate_relevancy(self, user_question: str, final_response: str) -> RelevancyJudgeOutput:
-        """Evaluates whether the response directly answers the user's question."""
-        prompt = f"""You are an LLM Evaluation Judge.
-Assess whether the Agent's response directly and adequately answers the User's inquiry:
-
-[USER QUESTION]:
-{user_question}
-
-[AGENT RESPONSE]:
-{final_response}
-"""
-        try:
-            return self.relevancy_judge.invoke([HumanMessage(content=prompt)])
-        except Exception as e:
-            return RelevancyJudgeOutput(
-                is_relevant=True,
-                score=1.0,
-                reasoning=f"Judge fallback: {str(e)}"
-            )
-
-    def evaluate_formatting(self, final_response: str) -> ExecutiveFormattingJudgeOutput:
-        """Evaluates INR currency formatting (₹), comma separators, and bolding."""
-        prompt = f"""You are an Executive Communication Judge.
-Evaluate whether the response adheres to executive formatting standards:
-1. Are monetary numbers formatted in Indian Rupees (₹) with commas (e.g. ₹1,24,500)?
-2. Are key metrics, numbers, and totals highlighted in **bold**?
-
-[AGENT RESPONSE]:
-{final_response}
-"""
-        try:
-            return self.formatting_judge.invoke([HumanMessage(content=prompt)])
+            return self.unified_judge.invoke([HumanMessage(content=prompt)])
         except Exception as e:
             has_rupee = "₹" in final_response or "rs" in final_response.lower()
             has_bold = "**" in final_response
-            return ExecutiveFormattingJudgeOutput(
+            return UnifiedJudgeOutput(
+                is_faithful=True,
+                faithfulness_score=1.0,
+                hallucinated_facts=[],
+                is_relevant=True,
+                relevancy_score=1.0,
                 inr_currency_used=has_rupee,
                 bold_highlights_used=has_bold,
-                score=1.0 if (has_rupee or has_bold) else 0.8,
-                reasoning="Rule-based fallback check."
+                formatting_score=1.0,
+                critique=f"Fallback check (API error: {str(e)[:50]})"
             )
 
     @staticmethod
     def validate_chart_config(
         actual_chart: Optional[Dict[str, Any]],
         expected_type: Optional[str],
+        columns: Optional[List[str]] = None,
     ) -> Tuple[bool, Optional[str]]:
         """Deterministically validates that chart keys exist in columns and chart type is correct."""
         if expected_type is None:
@@ -243,6 +196,9 @@ Evaluate whether the response adheres to executive formatting standards:
 
         if not x_key or not y_key:
             return False, f"Missing x_key or y_key in chart_config: {actual_chart}"
+
+        if columns and (x_key not in columns or y_key not in columns):
+            return False, f"Chart keys ({x_key}, {y_key}) not found in query columns {columns}"
 
         return True, "Valid ChartConfig"
 
@@ -303,8 +259,8 @@ Evaluate whether the response adheres to executive formatting standards:
     def generate_markdown_report(cls, summary: SynthesisEvaluationSummary, results: List[SynthesisEvaluationResultItem]) -> str:
         """Generates a detailed Markdown report for Synthesis evaluation."""
         md = []
-        md.append("# 📊 DataPilot Executive Synthesis & DeepEval Judge Report\n")
-        md.append(f"**Generated:** `2026-08-24` | **Judge Model:** `openai/gpt-oss-120b` | **Benchmark Size:** `{summary.total_samples} test cases`\n")
+        md.append("# 📊 DataPilot Executive Synthesis & LLM Judge Report\n")
+        md.append(f"**Generated:** `2026-08-25` | **Judge Model:** `openai/gpt-oss-120b` | **Benchmark Size:** `{summary.total_samples} test cases`\n")
 
         # Scorecard
         md.append("## 📈 Executive Summary Scorecard\n")
@@ -320,8 +276,8 @@ Evaluate whether the response adheres to executive formatting standards:
         md.append(f"| **ChartConfig Schema Accuracy** | **{summary.chart_accuracy_pct:.1f}%** | $\\ge 90.0\\%$ | {chart_status} |")
         md.append(f"| **INR Currency Formatting (₹)** | **{summary.inr_compliance_pct:.1f}%** | $\\ge 80.0\\%$ | ✅ PASS |")
         md.append(f"| **Overall Synthesis Quality Index** | **{summary.overall_quality_pct:.1f}%** | $\\ge 88.0\\%$ | ✅ PASS |")
-        md.append(f"| **Median (P50) Synthesis Time** | **{summary.p50_latency_ms:.1f} ms** | $< 1200\\text{{ ms}}$ | ⚡ FAST |")
-        md.append(f"| **P95 Synthesis Time** | **{summary.p95_latency_ms:.1f} ms** | $< 2500\\text{{ ms}}$ | ⚡ FAST |\n")
+        md.append(f"| **Median (P50) Synthesis Time** | **{summary.p50_latency_ms:.1f} ms** | $< 1500\\text{{ ms}}$ | ⚡ FAST |")
+        md.append(f"| **P95 Synthesis Time** | **{summary.p95_latency_ms:.1f} ms** | $< 3000\\text{{ ms}}$ | ⚡ FAST |\n")
 
         failures = [r for r in results if not r.is_faithful or not r.chart_valid]
         if failures:

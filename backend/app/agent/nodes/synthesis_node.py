@@ -27,12 +27,12 @@ Action Draft (if any):
 {action_payload}
 
 Instructions:
-1. Provide a direct, professional, executive-level answer to the user's inquiry based on the data.
-2. Format all monetary figures in Indian Rupees (₹) with comma separators (e.g. **₹1,24,500**, **₹45,200**).
-3. Highlight all key numbers, counts, percentages, and top entities in **bold**.
-4. If statistical metrics are present, highlight key insights (e.g., net margins, growth rates, churn percentages).
-5. If an action draft is present, summarize the campaign highlights concisely.
-6. Keep the response concise, strategic, and data-driven (2-4 bullet points max). Do not mention SQL code or table names.
+1. Provide a direct, professional, executive-level answer to the user's inquiry based strictly on the provided data, metrics, or action draft.
+2. Format ALL monetary figures in Indian Rupees (₹) using standard Indian numbering format (e.g. **₹1,25,000**, **₹45,200**, **₹10,00,000**, **₹4.5 Lakhs**). NEVER omit the ₹ symbol for monetary numbers.
+3. Highlight all key numbers, counts, percentages, metrics, and top entities in **bold** (e.g. **1,420**, **25.0%**, **₹8,45,000**, **9.0%**).
+4. If statistical metrics are present, explicitly state and highlight key insights (e.g., net margins, growth rates, churn percentages, days of stock remaining).
+5. If an action draft is present, summarize the campaign title, subject, and key details concisely. DO NOT invent, hallucinate, or fabricate any numbers, order quantities, delivery dates, or metrics not present in the action payload or data.
+6. Keep the response concise, strategic, and data-driven (2-4 bullet points max). Do not mention SQL code, query syntax, or database table names.
 """
 
 
@@ -90,22 +90,29 @@ def determine_chart_config(
     q_lower = user_question.lower()
     x_lower = x_key.lower()
 
-    # Donut / Pie Chart
-    donut_indicators = [
-        "payment_method", "method", "status", "segment", "customer_segment",
-        "share", "distribution", "breakdown", "split", "reason"
-    ]
-    if any(k in x_lower or k in q_lower for k in donut_indicators) and len(rows) <= 8:
-        title = f"{x_key.replace('_', ' ').title()} Breakdown"
-        return {"type": "donut", "x_key": x_key, "y_key": y_key, "title": title}
+    # Special Case: MoM 2-period comparison is best visualized as a Bar chart
+    if len(rows) == 2 and any(k in q_lower for k in ["mom", "month-over-month", "growth rate", "comparison", "compare"]):
+        clean_y = y_key.replace("_", " ").title()
+        clean_x = x_key.replace("_", " ").title()
+        return {"type": "bar", "x_key": x_key, "y_key": y_key, "title": f"{clean_y} by {clean_x}"}
 
-    # Line / Area Chart
+    # Donut / Pie Chart (Part-to-whole categorical breakdowns, e.g. payment methods, reasons, segments, status breakdowns)
+    donut_indicators = ["payment_method", "reason", "customer_segment", "segment"]
+    donut_keywords = ["breakdown", "distribution", "share", "split", "percentage breakdown", "orders by"]
+    if (any(k in x_lower for k in donut_indicators) or any(k in q_lower for k in donut_keywords)) and len(rows) <= 8:
+        # If query is explicitly a multi-row aggregation per status with total amounts without "breakdown", prefer Bar
+        if not (("per order status" in q_lower or "per status" in q_lower) and "breakdown" not in q_lower):
+            title = f"{x_key.replace('_', ' ').title()} Breakdown"
+            return {"type": "donut", "x_key": x_key, "y_key": y_key, "title": title}
+
+    # Line / Area Chart (Time-series trends over dates, days, months, quarters, years)
     date_indicators = [
-        "date", "month", "day", "week", "year", "created_at", "order_date",
-        "signup_date", "payment_date"
+        "date", "month", "day", "week", "year", "quarter", "q1", "q2", "q3", "q4",
+        "created_at", "order_date", "signup_date", "payment_date", "signup_quarter",
+        "order_month", "payment_day"
     ]
-    time_query_indicators = ["trend", "daily", "monthly", "over time", "growth"]
-    if any(k in x_lower for k in date_indicators) or any(k in q_lower for k in time_query_indicators):
+    time_query_indicators = ["trend", "daily", "monthly", "quarterly", "over time", "last 4 quarters", "over the last"]
+    if (any(k in x_lower for k in date_indicators) or any(k in q_lower for k in time_query_indicators)) and len(rows) >= 3:
         title = f"{y_key.replace('_', ' ').title()} Trend"
         return {"type": "area", "x_key": x_key, "y_key": y_key, "title": title}
 
@@ -152,7 +159,7 @@ def synthesis_node(state: AgentState) -> dict:
         }
 
     # Case 2: Query Failed after retries
-    if not rows and error_history:
+    if not rows and not metrics and not action_payload and error_history:
         final_answer = f"I encountered an error executing this request: {error_history[-1]}. Please refine your question."
         return {
             "final_response": final_answer,
@@ -160,8 +167,8 @@ def synthesis_node(state: AgentState) -> dict:
             "agent_thought_trace": ["⚠️ [Synthesis] Error response prepared"],
         }
 
-    # Case 3: Empty dataset
-    if not rows:
+    # Case 3: Empty dataset (no rows, no computed metrics, no action draft)
+    if not rows and not metrics and not action_payload:
         return {
             "final_response": "No matching records were found in the database for your query.",
             "chart_config": None,
@@ -169,7 +176,7 @@ def synthesis_node(state: AgentState) -> dict:
         }
 
     # Case 4: Lean Data Synthesis (Pass max 6 preview rows to prevent context bloat)
-    sample_rows = rows[:6]
+    sample_rows = rows[:6] if rows else []
     compact_summary = json.dumps(sample_rows, default=str)
 
     try:
@@ -200,7 +207,7 @@ def synthesis_node(state: AgentState) -> dict:
         text=final_answer,
         rows=rows,
         metrics=metrics,
-        has_data=bool(rows),
+        has_data=bool(rows) or bool(metrics),
     )
     clean_final_answer = output_guard_outcome.sanitized_output
 

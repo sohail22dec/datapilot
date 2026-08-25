@@ -68,17 +68,15 @@ def evaluate_single_synthesis_case(item: dict, evaluator: SynthesisJudgeEvaluato
     final_response = synth_output.get("final_response", "")
     chart_config = synth_output.get("chart_config")
 
-    # LLM-as-a-Judge Evaluations
-    faith_out = evaluator.evaluate_faithfulness(user_q, query_results, metrics, final_response)
-    rel_out = evaluator.evaluate_relevancy(user_q, final_response)
-    fmt_out = evaluator.evaluate_formatting(final_response)
+    # Unified LLM-as-a-Judge Evaluation (Faithfulness, Relevancy, Formatting in 1 call)
+    judge_out = evaluator.evaluate_response(user_q, query_results, metrics, final_response)
 
     # Deterministic Chart Validator
     chart_valid, chart_reason = evaluator.validate_chart_config(chart_config, expected_chart_type, columns)
 
     diff_reason = None
-    if not faith_out.is_faithful:
-        diff_reason = f"Hallucination: {faith_out.reasoning}"
+    if not judge_out.is_faithful:
+        diff_reason = f"Hallucination: {judge_out.hallucinated_facts} ({judge_out.critique})"
     elif not chart_valid:
         diff_reason = chart_reason
 
@@ -89,12 +87,12 @@ def evaluate_single_synthesis_case(item: dict, evaluator: SynthesisJudgeEvaluato
         final_response=final_response,
         chart_config=chart_config,
         expected_chart_type=expected_chart_type,
-        is_faithful=faith_out.is_faithful,
-        faithfulness_score=faith_out.score,
-        is_relevant=rel_out.is_relevant,
-        relevancy_score=rel_out.score,
-        inr_formatted=fmt_out.inr_currency_used,
-        bold_highlights=fmt_out.bold_highlights_used,
+        is_faithful=judge_out.is_faithful,
+        faithfulness_score=judge_out.faithfulness_score,
+        is_relevant=judge_out.is_relevant,
+        relevancy_score=judge_out.relevancy_score,
+        inr_formatted=judge_out.inr_currency_used,
+        bold_highlights=judge_out.bold_highlights_used,
         chart_valid=chart_valid,
         latency_ms=latency_ms,
         diff_reason=diff_reason,
@@ -113,7 +111,7 @@ def run_synthesis_eval_suite(target_faithfulness: float = 90.0) -> bool:
     print(f"📦 Loaded {len(dataset)} Synthesis Test Scenarios\n")
 
     results = []
-    for item in dataset:
+    for idx, item in enumerate(dataset):
         res = evaluate_single_synthesis_case(item, evaluator)
         results.append(res)
 
@@ -126,6 +124,10 @@ def run_synthesis_eval_suite(target_faithfulness: float = 90.0) -> bool:
 
         chart_label = f"({res.chart_config.get('type')})" if res.chart_config else "(no chart)"
         print(f"{badge} ({res.latency_ms:>6.1f}ms) [{res.id}] {chart_label:<10} | {res.user_question[:38]}...")
+
+        # Pace calls (1.0s sleep) to respect 30 requests/minute Groq rate limit
+        if idx < len(dataset) - 1:
+            time.sleep(1.0)
 
     summary = SynthesisJudgeEvaluator.compute_summary(results)
 

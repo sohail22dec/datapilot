@@ -16,6 +16,8 @@ class GuardrailOutcome(BaseModel):
     latency_ms: float = Field(0.0, description="Latency spent executing pre-flight guardrail in ms.")
 
 
+import base64
+
 # ---------------------------------------------------------------------------
 # Pre-compiled Zero-False-Positive Regex Patterns
 # ---------------------------------------------------------------------------
@@ -38,7 +40,7 @@ SQL_INJECTION_PATTERNS = [
     (
         "SQL_UNION_SCHEMA_PROBE",
         re.compile(
-            r"\bUNION\s+(ALL\s+)?SELECT\b.*?\bFROM\s+(pg_shadow|pg_authid|pg_user|information_schema|pg_tables)\b",
+            r"\bUNION\s+(ALL\s+)?SELECT\b.*?\bFROM\s+(pg_shadow|pg_authid|pg_user|information_schema|pg_tables|pg_catalog)\b",
             re.IGNORECASE | re.DOTALL,
         ),
         "Direct queries probing internal database catalog tables and security metadata are restricted.",
@@ -49,42 +51,107 @@ SQL_INJECTION_PATTERNS = [
 PROMPT_INJECTION_PATTERNS = [
     (
         "SYSTEM_TAG_INJECTION",
-        re.compile(r"<\s*/?\s*(system|instruction|developer|inst|context|system_prompt)\s*>", re.IGNORECASE),
-        "System prompt boundary tags (`<system>`, `[INST]`) are not allowed in queries. Please rephrase your question in natural language.",
+        re.compile(
+            r"(<\s*/?\s*(system|instruction|developer|inst|context|system_prompt|admin_override)\s*>|```\s*(system|instruction|developer|admin))",
+            re.IGNORECASE,
+        ),
+        "System prompt boundary tags (`<system>`, `[INST]`, ````system`) are not allowed in queries. Please rephrase your question in natural language.",
     ),
     (
         "PROMPT_OVERRIDE_DIRECTIVE",
         re.compile(
-            r"(?i)\b(ignore|disregard|forget|bypass|override)\b.*?\b(all|previous|prior|system|above)\b.*?\b(instructions|rules|prompts|directives|guardrails)\b"
+            r"(?i)\b(ignore|disregard|forget|bypass|override)\b.*?\b(all|previous|prior|system|above|everything|context)\b.*?\b(instructions|rules|prompts|directives|guardrails|know|context)\b"
         ),
         "DataPilot AI operates strictly within enterprise data analytics boundaries and cannot override core system instructions.",
     ),
     (
         "ROLE_HIJACK_JAILBREAK",
         re.compile(
-            r"(?i)\b(you are now|act as|pretend to be)\b.*?\b(dan|jailbreak|unrestricted|developer mode|god mode|root)\b"
+            r"(?i)\b(you are now|act as|pretend to be|roleplay as|simulate)\b.*?\b(dan|jailbreak|unrestricted|developer mode|god mode|root|terminal\s+shell|bash|command\s+line)\b|\b(developer mode enabled|jailbreak mode)\b"
         ),
         "Role-switching or unconstrained mode requests are not permitted. DataPilot operates exclusively as a Business Intelligence analyst.",
     ),
     (
         "SYSTEM_PROMPT_EXTRACTION",
         re.compile(
-            r"(?i)\b(repeat|print|show|reveal|display|output|dump)\b.*?\b(your\s+full\s+system\s+prompt|initial\s+instructions|system\s+directive|developer\s+prompt)\b"
+            r"(?i)\b(repeat|print|show|reveal|display|output|dump)\b.*?\b(your\s+(entire\s+|full\s+)?(initial\s+)?system\s+prompt|initial\s+instructions|system\s+directive|developer\s+prompt|verbatim)\b"
         ),
         "Internal operational directives and prompt architecture cannot be disclosed.",
+    ),
+    (
+        "TRANSLATION_EXECUTION_WRAPPER",
+        re.compile(
+            r"(?i)\b(translate|convert|transform)\b.*?\b(and\s+execute|and\s+run)\b.*?(drop|delete|insert|update|truncate|alter|grant|revoke|shutdown|rm\s+-rf)"
+        ),
+        "Wrapped translation/execution directives containing system commands or SQL mutations are prohibited.",
+    ),
+    (
+        "TERMINAL_COMMAND_INJECTION",
+        re.compile(
+            r"(?i)\b(rm\s+-rf|sudo\s+|chmod\s+|cat\s+/etc/|/bin/sh|/bin/bash)\b"
+        ),
+        "Operating system and shell command executions are strictly prohibited.",
+    ),
+    (
+        "MULTI_TURN_ROLEPLAY_INJECTION",
+        re.compile(
+            r"(?i)\bHuman:\s*.*?\bAssistant:\s*.*?\bHuman:\s*",
+            re.DOTALL,
+        ),
+        "Multi-turn conversation transcript hijacking is not permitted.",
+    ),
+    (
+        "BASE64_DECODE_EXECUTION",
+        re.compile(
+            r"(?i)\b(base64\s+decode\s+and\s+execute|decode\s+base64\s+and\s+run)\b"
+        ),
+        "Base64 encoded execution directives are prohibited.",
     ),
 ]
 
 # 3. Environment & Secret Extraction Probes
 SECRET_PROBE_PATTERNS = [
     (
+        "ENV_FILE_ACCESS_PROBE",
+        re.compile(r"(?i)(/\.env|\.env\b)"),
+        "Direct access to .env configuration files is strictly prohibited.",
+    ),
+    (
         "CREDENTIAL_EXTRACTION_PROBE",
         re.compile(
-            r"(?i)\b(show|print|reveal|dump|extract|read|get)\b.*?(database_url|postgres_password|gemini_api_key|groq_api_key|api_key|secret_key|\.env\b|server\s+secrets)"
+            r"(?i)\b(show|print|reveal|dump|extract|read|get|what\s+is|what\s+are|output)\b.*?(database_url|postgres_password|database\s+password|gemini_api_key|groq_api_key|aws_secret|aws_secret_access_key|jwt\s+secret|secret_key|api_token|\.env|server\s+secrets|process\.env|os\.environ|service_role|master\s+secret|encryption\s+key|backend\s+config|password\s+hashes?)"
         ),
-        "Access to environment variables, system credentials, and private API keys is strictly prohibited.",
+        "Access to environment variables, system credentials, private API keys, and database passwords is strictly prohibited.",
+    ),
+    (
+        "DIRECT_SECRET_NAME_PROBE",
+        re.compile(
+            r"(?i)\b(AWS_SECRET_ACCESS_KEY|GROQ_API_KEY|GEMINI_API_KEY|DATABASE_URL|POSTGRES_PASSWORD|service_role\s+key|backend\s+config\s+token)\b"
+        ),
+        "Queries referencing internal secret variable identifiers are blocked for security.",
     ),
 ]
+
+
+def check_base64_payload(text: str) -> bool:
+    """
+    Detects, decodes, and inspects base64 encoded substrings for embedded SQL or system exploits.
+    """
+    b64_candidates = re.findall(
+        r"(?:['\"]([A-Za-z0-9+/=]{8,})['\"]|base64\s*(?:decode)?.*?([A-Za-z0-9+/=]{8,}))",
+        text,
+        re.IGNORECASE,
+    )
+    for groups in b64_candidates:
+        token = groups[0] or groups[1]
+        if token:
+            try:
+                decoded = base64.b64decode(token).decode("utf-8", errors="ignore").upper()
+                if any(kw in decoded for kw in ["DROP", "DELETE", "UPDATE", "INSERT", "TRUNCATE", "ALTER", "SELECT", "GRANT"]):
+                    return True
+            except Exception:
+                pass
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -199,6 +266,18 @@ def sanitize_and_validate_input(text: str) -> GuardrailOutcome:
                 matched_patterns=[rule_id],
                 latency_ms=elapsed_ms,
             )
+
+    # 6. Check Embedded Base64 Obfuscated Payloads
+    if check_base64_payload(cleaned):
+        elapsed_ms = round((time.perf_counter() - start_time) * 1000, 3)
+        return GuardrailOutcome(
+            is_safe=False,
+            sanitized_text=cleaned,
+            rejection_reason="Inquiry contains obfuscated base64 payload with restricted database/system commands.",
+            violation_type="BASE64_OBFUSCATED_PAYLOAD",
+            matched_patterns=["BASE64_EXPLOIT_DETECTED"],
+            latency_ms=elapsed_ms,
+        )
 
     # Clean input passed all pre-flight checks
     elapsed_ms = round((time.perf_counter() - start_time) * 1000, 3)

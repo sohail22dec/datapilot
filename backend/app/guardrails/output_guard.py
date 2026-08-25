@@ -22,29 +22,34 @@ class OutputGuardOutcome(BaseModel):
 # ---------------------------------------------------------------------------
 
 SECRET_PATTERNS = [
+    # Credit Card Numbers (Visa, Mastercard, Amex, Discover: 13-19 digits formatted or unformatted)
     (
-        "GROQ_API_KEY_LEAK",
-        re.compile(r"\bgsk_[a-zA-Z0-9_-]{20,}\b"),
+        "CREDIT_CARD_PII_LEAK",
+        re.compile(r"\b(?:\d{4}[ -]?){3}\d{4}\b|\b3[47]\d{2}[ -]?\d{6}[ -]?\d{5}\b"),
+        "[REDACTED_CREDIT_CARD]",
+    ),
+    # Live API Tokens & Keys (e.g. sk-live_..., gsk_..., AIza..., AKIA...)
+    (
+        "API_TOKEN_LEAK",
+        re.compile(r"\b(?:sk-live_|gsk_|AIza|AKIA)[a-zA-Z0-9_\-]{16,}\b"),
         "[REDACTED_API_KEY]",
     ),
-    (
-        "GEMINI_API_KEY_LEAK",
-        re.compile(r"\bAIza[0-9A-Za-z-_]{20,}\b"),
-        "[REDACTED_API_KEY]",
-    ),
+    # Database Connection URIs
     (
         "DATABASE_URI_LEAK",
         re.compile(r"\bpostgres(?:ql)?(?:\+psycopg2)?://[^\s/]+@[^\s/]+/[^\s]+", re.IGNORECASE),
         "[REDACTED_DATABASE_URI]",
     ),
+    # Bearer Tokens
     (
         "BEARER_TOKEN_LEAK",
         re.compile(r"\bBearer\s+[a-zA-Z0-9_\-\.]{20,}\b", re.IGNORECASE),
         "Bearer [REDACTED_TOKEN]",
     ),
+    # Environment Variable Assignments
     (
         "ENV_VARIABLE_ASSIGNMENT_LEAK",
-        re.compile(r"\b(DATABASE_URL|GEMINI_API_KEY|GROQ_API_KEY|POSTGRES_PASSWORD)\s*=\s*[^\s]+", re.IGNORECASE),
+        re.compile(r"\b(DATABASE_URL|GEMINI_API_KEY|GROQ_API_KEY|POSTGRES_PASSWORD|AWS_SECRET_ACCESS_KEY)\s*=\s*[^\s]+", re.IGNORECASE),
         r"\1=[REDACTED]",
     ),
 ]

@@ -31,9 +31,7 @@ from .synthesis_deepeval_metrics import (
     SynthesisJudgeEvaluator,
     SynthesisEvaluationResultItem,
     SynthesisEvaluationSummary,
-    FaithfulnessJudgeOutput,
-    RelevancyJudgeOutput,
-    ExecutiveFormattingJudgeOutput,
+    UnifiedJudgeOutput,
 )
 
 __all__ = [
@@ -59,7 +57,5 @@ __all__ = [
     "SynthesisJudgeEvaluator",
     "SynthesisEvaluationResultItem",
     "SynthesisEvaluationSummary",
-    "FaithfulnessJudgeOutput",
-    "RelevancyJudgeOutput",
-    "ExecutiveFormattingJudgeOutput",
+    "UnifiedJudgeOutput",
 ]

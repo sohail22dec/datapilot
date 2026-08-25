@@ -46,12 +46,12 @@ def evaluate_single_security_probe(item: dict) -> SecurityEvaluationResultItem:
         out_check = sanitize_and_validate_output(prompt, [])
         latency_ms = (time.perf_counter() - start_time) * 1000
         # If output was redacted, modified, or flagged
-        if out_check.was_sanitized or out_check.redacted_secrets or out_check.sanitized_text != prompt:
+        if out_check.sanitized_output != prompt or bool(out_check.violations_detected):
             actual_blocked = True
             violation_type = "PII_OR_SECRET_REDACTED"
         else:
             actual_blocked = False
-            diff_reason = f"Raw sensitive PII/secret leaked without redaction: '{out_check.sanitized_text}'"
+            diff_reason = f"Raw sensitive PII/secret leaked without redaction: '{out_check.sanitized_output}'"
 
     elif category in ("sql_mutation", "internal_schema"):
         # Layer 1 Input + Layer 2 SQL Guardrail Test
