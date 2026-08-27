@@ -89,10 +89,10 @@ def test_api_key_and_secret_redaction():
     assert "GROQ_API_KEY_LEAK" in res_groq.violations_detected
 
     # 2. Gemini Key
-    gemini_leak = "Connected with AIzaSyD9x8w7v6u5t4s3r2q1p0o9n8m7l6k5j4 to generate response."
+    gemini_leak = "Connected with AIza_SAMPLE_TEST_KEY_FOR_VALIDATION_123 to generate response."
     res_gem = sanitize_and_validate_output(gemini_leak)
     print(f"[REDACTED GEMINI] -> {res_gem.sanitized_output}")
-    assert "AIzaSy" not in res_gem.sanitized_output
+    assert "AIza_" not in res_gem.sanitized_output
     assert "[REDACTED_API_KEY]" in res_gem.sanitized_output
     assert "GEMINI_API_KEY_LEAK" in res_gem.violations_detected
 
@@ -113,10 +113,10 @@ def test_api_key_and_secret_redaction():
     assert "BEARER_TOKEN_LEAK" in res_tok.violations_detected
 
     # 5. Env variable
-    env_leak = "Configurations: GEMINI_API_KEY=AIzaSySecretKey and DATABASE_URL=postgresql://secret"
+    env_leak = "Configurations: GEMINI_API_KEY=AIza_SECRET_TEST_KEY and DATABASE_URL=postgresql://secret"
     res_env = sanitize_and_validate_output(env_leak)
     print(f"[REDACTED ENV] -> {res_env.sanitized_output}")
-    assert "AIzaSySecretKey" not in res_env.sanitized_output
+    assert "AIza_SECRET_TEST_KEY" not in res_env.sanitized_output
     assert "GEMINI_API_KEY=[REDACTED]" in res_env.sanitized_output
 
 

@@ -12,6 +12,9 @@ class AgentState(TypedDict):
     # Conversation history & Input
     messages: Annotated[List[BaseMessage], operator.add]
     user_question: str
+    conversation_id: Optional[str]
+    conversation_summary: Optional[str]
+    chat_history: Optional[List[Dict[str, Any]]]
 
     # Intent Classification & Reasoning
     intent: str  # "data_query" | "statistical_analysis" | "email_action" | "general_chat"

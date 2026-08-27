@@ -19,6 +19,12 @@ from app.guardrails.output_guard import (
     scrub_stack_traces,
 )
 
+from app.guardrails.rate_limiter import (
+    SlidingWindowRateLimiter,
+    rate_limiter,
+    verify_rate_limit,
+)
+
 __all__ = [
     "GuardrailOutcome",
     "sanitize_and_validate_input",
@@ -34,4 +40,8 @@ __all__ = [
     "extract_numbers_from_text",
     "redact_secrets",
     "scrub_stack_traces",
+    "SlidingWindowRateLimiter",
+    "rate_limiter",
+    "verify_rate_limit",
 ]
+

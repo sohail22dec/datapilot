@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Sidebar } from "../components/sidebar/Sidebar";
 import { ChatWorkspace } from "../components/workspace/ChatWorkspace";
 import { Conversation, Message } from "../types/chat";
@@ -34,6 +34,60 @@ export default function Home() {
   );
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
+  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+
+  // Initial load: Fetch persistent conversations from backend Supabase
+  useEffect(() => {
+    async function loadConversations() {
+      try {
+        const res = await fetch(`${backendUrl}/api/conversations`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.conversations && data.conversations.length > 0) {
+          const loaded: Conversation[] = data.conversations.map((c: any) => ({
+            id: c.id,
+            title: c.title,
+            timestamp: c.updated_at ? new Date(c.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : formatCurrentTime(),
+            messages: [],
+          }));
+          setConversations(loaded);
+          setActiveConversationId(loaded[0].id);
+
+          // Hydrate the first conversation's messages
+          const firstDetailRes = await fetch(`${backendUrl}/api/conversations/${loaded[0].id}`);
+          if (firstDetailRes.ok) {
+            const firstDetail = await firstDetailRes.json();
+            if (firstDetail.messages) {
+              setConversations((prev) =>
+                prev.map((conv) =>
+                  conv.id === loaded[0].id
+                    ? {
+                        ...conv,
+                        messages: firstDetail.messages.map((m: any) => ({
+                          id: m.id,
+                          role: m.role,
+                          content: m.content,
+                          timestamp: m.timestamp || formatCurrentTime(),
+                          sql: m.sql,
+                          data: m.data,
+                          metrics: m.metrics,
+                          chartConfig: m.chart_config,
+                          thoughtTrace: m.thought_trace,
+                        })),
+                      }
+                    : conv
+                )
+              );
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("Could not load stored conversations from backend:", err);
+      }
+    }
+    loadConversations();
+  }, [backendUrl]);
+
   const activeConversation =
     conversations.find((c) => c.id === activeConversationId) ||
     conversations[0];
@@ -54,11 +108,50 @@ export default function Home() {
     setActiveConversationId(newId);
   };
 
-  const handleSelectConversation = (id: string) => {
+  const handleSelectConversation = async (id: string) => {
     setActiveConversationId(id);
+    const target = conversations.find((c) => c.id === id);
+    if (target && target.messages.length === 0) {
+      try {
+        const res = await fetch(`${backendUrl}/api/conversations/${id}`);
+        if (res.ok) {
+          const detail = await res.json();
+          if (detail.messages) {
+            setConversations((prev) =>
+              prev.map((c) =>
+                c.id === id
+                  ? {
+                      ...c,
+                      messages: detail.messages.map((m: any) => ({
+                        id: m.id,
+                        role: m.role,
+                        content: m.content,
+                        timestamp: m.timestamp || formatCurrentTime(),
+                        sql: m.sql,
+                        data: m.data,
+                        metrics: m.metrics,
+                        chartConfig: m.chart_config,
+                        thoughtTrace: m.thought_trace,
+                      })),
+                    }
+                  : c
+              )
+            );
+          }
+        }
+      } catch (err) {
+        console.warn("Error hydrating conversation messages:", err);
+      }
+    }
   };
 
-  const handleDeleteConversation = (id: string) => {
+  const handleDeleteConversation = async (id: string) => {
+    try {
+      await fetch(`${backendUrl}/api/conversations/${id}`, { method: "DELETE" });
+    } catch (err) {
+      console.warn("Could not delete conversation on backend:", err);
+    }
+
     setConversations((prev) => {
       const filtered = prev.filter((c) => c.id !== id);
       if (filtered.length === 0) {
@@ -124,8 +217,16 @@ export default function Home() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify({
+          message: text,
+          conversation_id: activeConversationId,
+        }),
       });
+
+      if (response.status === 429) {
+        const retryHeader = response.headers.get("Retry-After") || "60";
+        throw new Error(`Rate limit exceeded: 30 requests/minute. Please wait ${retryHeader} seconds.`);
+      }
 
       if (!response.ok) {
         throw new Error(`API error: ${response.statusText}`);

@@ -7,25 +7,34 @@ from app.agent.graph import agent_graph, run_agent_workflow
 from app.agent.state import AgentState
 from app.agent.nodes.synthesis_node import extract_text
 from app.schemas import ChatResponse, ChartConfig
+from app.memory.manager import get_optimized_context, save_turn
 
 
-def process_chat_query(user_question: str) -> ChatResponse:
+def process_chat_query(
+    user_question: str,
+    conversation_id: Optional[str] = None,
+    background_tasks: Optional[Any] = None,
+) -> ChatResponse:
     """
     Synchronous orchestration entrypoint for DataPilot API.
-    1. Checks QueryCache for sub-millisecond repeat query responses.
-    2. Invokes compiled LangGraph StateGraph (Router ➔ SQL ➔ Self-Healing ➔ Stats/Email ➔ Synthesis).
-    3. Caches and returns rich ChatResponse payload.
+    1. Retrieves optimized conversation memory context (Watermark-compacted if >2,000 tokens).
+    2. Invokes compiled LangGraph StateGraph with memory context.
+    3. Persists turn and schedules async background compaction if watermark exceeded.
     """
-    cached_response = query_cache.get(user_question)
-    if cached_response:
-        return ChatResponse(**cached_response)
+    mem_ctx = get_optimized_context(conversation_id)
 
     try:
-        final_state: AgentState = run_agent_workflow(user_question)
+        final_state: AgentState = run_agent_workflow(
+            user_question=user_question,
+            conversation_id=conversation_id,
+            conversation_summary=mem_ctx.summary,
+            chat_history=mem_ctx.recent_messages,
+        )
     except Exception as e:
         return ChatResponse(
             response=f"I encountered an issue processing your request: {str(e)}",
             model=settings.GEMINI_MODEL,
+            conversation_id=conversation_id,
         )
 
     chart_cfg = None
@@ -38,41 +47,61 @@ def process_chat_query(user_question: str) -> ChatResponse:
             title=cfg_dict.get("title"),
         )
 
+    final_resp_text = final_state.get("final_response") or "Analysis completed."
+    sql_text = final_state.get("sql_query")
+    data_rows = final_state.get("query_results")
+    col_names = final_state.get("columns")
+    metrics = final_state.get("computed_metrics")
+    thought_trace = final_state.get("agent_thought_trace", [])
+
     response_payload = ChatResponse(
-        response=final_state.get("final_response") or "Analysis completed.",
-        sql=final_state.get("sql_query"),
-        data=final_state.get("query_results"),
-        columns=final_state.get("columns"),
+        response=final_resp_text,
+        sql=sql_text,
+        data=data_rows,
+        columns=col_names,
         row_count=final_state.get("row_count", 0),
         execution_time_ms=final_state.get("execution_time_ms", 0.0),
         chart_config=chart_cfg,
         model=settings.GEMINI_MODEL,
+        conversation_id=conversation_id,
     )
 
-    query_cache.set(user_question, response_payload.model_dump())
+    if conversation_id:
+        save_turn(
+            conversation_id=conversation_id,
+            user_question=user_question,
+            assistant_response=final_resp_text,
+            sql=sql_text,
+            data_preview=data_rows,
+            metrics=metrics,
+            chart_config=final_state.get("chart_config"),
+            thought_trace=thought_trace,
+            background_tasks=background_tasks,
+        )
+
     return response_payload
 
 
-async def stream_agent_workflow(user_question: str) -> AsyncGenerator[str, None]:
+async def stream_agent_workflow(
+    user_question: str,
+    conversation_id: Optional[str] = None,
+    background_tasks: Optional[Any] = None,
+) -> AsyncGenerator[str, None]:
     """
-    Native LangGraph Event Streaming Generator (astream_events v2):
-    1. Runs the compiled LangGraph StateGraph natively so LangSmith records the full node tree.
-    2. Streams 'step' events as nodes transition (router_node ➔ sql_node ➔ synthesis_node).
-    3. Streams 'token' events word-by-word as synthesis_node generates text in <300ms perceived time.
-    4. Yields 'done' event with final data table, row count, execution time, and chart config.
+    Native LangGraph Event Streaming Generator (astream_events v2) with Memory Context:
+    1. Loads optimized memory context (<520 tokens).
+    2. Streams step badges and word-by-word token generation.
+    3. Persists turn to Supabase and dispatches non-blocking background compaction.
     """
-    # 0. Check QueryCache for instant 0ms cached stream
-    cached_data = query_cache.get(user_question)
-    if cached_data:
-        yield f"event: step\ndata: {json.dumps({'step': 'Serving from QueryCache', 'badge': '⚡ Cache Hit'})}\n\n"
-        yield f"event: token\ndata: {json.dumps({'delta': cached_data.get('response', '')})}\n\n"
-        yield f"event: done\ndata: {json.dumps(cached_data)}\n\n"
-        return
+    mem_ctx = get_optimized_context(conversation_id)
 
-    # Initialize initial state
+    # Initialize initial state with memory context
     initial_state: AgentState = {
         "messages": [],
         "user_question": user_question,
+        "conversation_id": conversation_id,
+        "conversation_summary": mem_ctx.summary,
+        "chat_history": mem_ctx.recent_messages,
         "intent": "data_query",
         "thought_process": "",
         "direct_response": None,
@@ -133,25 +162,47 @@ async def stream_agent_workflow(user_question: str) -> AsyncGenerator[str, None]
     except Exception as e:
         err_msg = f"I encountered an error executing this request: {str(e)}"
         yield f"event: token\ndata: {json.dumps({'delta': err_msg})}\n\n"
-        yield f"event: done\ndata: {json.dumps({'response': err_msg, 'sql': None, 'data': None, 'columns': None, 'row_count': 0, 'execution_time_ms': 0.0, 'chart_config': None})}\n\n"
+        yield f"event: done\ndata: {json.dumps({'response': err_msg, 'sql': None, 'data': None, 'columns': None, 'row_count': 0, 'execution_time_ms': 0.0, 'chart_config': None, 'conversation_id': conversation_id})}\n\n"
         return
 
-    # 4. Emit final completed payload
+    # 4. Emit final completed payload & save turn to Supabase
     if final_state_output:
         res_text = final_state_output.get("final_response") or accumulated_tokens
+        sql_text = final_state_output.get("sql_query")
+        data_rows = final_state_output.get("query_results")
+        col_names = final_state_output.get("columns")
+        metrics = final_state_output.get("computed_metrics")
+        chart_cfg = final_state_output.get("chart_config")
+        thought_trace = final_state_output.get("agent_thought_trace", [])
+
         done_payload = {
             "response": res_text,
-            "sql": final_state_output.get("sql_query"),
-            "data": final_state_output.get("query_results"),
-            "columns": final_state_output.get("columns"),
+            "sql": sql_text,
+            "data": data_rows,
+            "columns": col_names,
             "row_count": final_state_output.get("row_count", 0),
             "execution_time_ms": final_state_output.get("execution_time_ms", 0.0),
-            "chart_config": final_state_output.get("chart_config"),
-            "computed_metrics": final_state_output.get("computed_metrics"),
+            "chart_config": chart_cfg,
+            "computed_metrics": metrics,
             "action_payload": final_state_output.get("action_payload"),
-            "thought_trace": final_state_output.get("agent_thought_trace", []),
+            "thought_trace": thought_trace,
+            "conversation_id": conversation_id,
         }
-        query_cache.set(user_question, done_payload)
+
+        if conversation_id:
+            save_turn(
+                conversation_id=conversation_id,
+                user_question=user_question,
+                assistant_response=res_text,
+                sql=sql_text,
+                data_preview=data_rows,
+                metrics=metrics,
+                chart_config=chart_cfg,
+                thought_trace=thought_trace,
+                background_tasks=background_tasks,
+            )
+
         yield f"event: done\ndata: {json.dumps(done_payload)}\n\n"
     else:
-        yield f"event: done\ndata: {json.dumps({'response': accumulated_tokens, 'sql': None, 'data': None, 'columns': None, 'row_count': 0, 'execution_time_ms': 0.0, 'chart_config': None})}\n\n"
+        yield f"event: done\ndata: {json.dumps({'response': accumulated_tokens, 'sql': None, 'data': None, 'columns': None, 'row_count': 0, 'execution_time_ms': 0.0, 'chart_config': None, 'conversation_id': conversation_id})}\n\n"
+

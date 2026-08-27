@@ -1,3 +1,4 @@
+from typing import Any, Dict, List, Optional
 from langgraph.graph import StateGraph, START, END
 
 from app.agent.state import AgentState
@@ -122,14 +123,22 @@ def create_agent_graph() -> StateGraph:
 agent_graph = create_agent_graph().compile()
 
 
-def run_agent_workflow(user_question: str) -> AgentState:
+def run_agent_workflow(
+    user_question: str,
+    conversation_id: Optional[str] = None,
+    conversation_summary: Optional[str] = None,
+    chat_history: Optional[List[Dict[str, Any]]] = None,
+) -> AgentState:
     """
-    Synchronously executes the decoupled LangGraph agent workflow.
+    Synchronously executes the decoupled LangGraph agent workflow with conversation memory context.
     Returns populated final AgentState with sub-2s latency.
     """
     initial_state: AgentState = {
         "messages": [],
         "user_question": user_question,
+        "conversation_id": conversation_id,
+        "conversation_summary": conversation_summary,
+        "chat_history": chat_history or [],
         "intent": "data_query",
         "thought_process": "",
         "direct_response": None,

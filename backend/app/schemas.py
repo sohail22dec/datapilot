@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 class ChatRequest(BaseModel):
     message: str = Field(..., description="The natural language question from the user.")
-
+    conversation_id: Optional[str] = Field(None, description="Optional persistent conversation thread ID.")
 
 
 class ChartConfig(BaseModel):
@@ -31,9 +31,44 @@ class ChatResponse(BaseModel):
     execution_time_ms: Optional[float] = Field(None, description="SQL query execution time in milliseconds.")
     chart_config: Optional[ChartConfig] = Field(None, description="Visual chart configuration if applicable.")
     model: Optional[str] = Field(None, description="AI model name used.")
+    conversation_id: Optional[str] = Field(None, description="Active conversation thread ID.")
+
+
+class ConversationItem(BaseModel):
+    id: str
+    title: str
+    summary: Optional[str] = None
+    message_count: int = 0
+    token_count: int = 0
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class ConversationListResponse(BaseModel):
+    conversations: List[ConversationItem]
+
+
+class ConversationMessageItem(BaseModel):
+    id: str
+    role: str
+    content: str
+    sql: Optional[str] = None
+    data: Optional[List[Dict[str, Any]]] = None
+    metrics: Optional[Dict[str, Any]] = None
+    chart_config: Optional[Dict[str, Any]] = None
+    thought_trace: Optional[List[str]] = None
+    timestamp: str = ""
+
+
+class ConversationDetailResponse(BaseModel):
+    id: str
+    title: str
+    summary: Optional[str] = None
+    messages: List[ConversationMessageItem]
 
 
 class DatabaseHealthResponse(BaseModel):
     status: str = Field(..., description="Connection status: 'healthy', 'connected', or 'error'.")
     schema_text: Optional[str] = Field(None, description="Detected tables and column definitions.")
     error: Optional[str] = Field(None, description="Error message if connection failed.")
+

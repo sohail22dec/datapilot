@@ -22,22 +22,65 @@ engine = create_engine(
 _cached_schema: Optional[str] = None
 _cached_tables_info: Optional[List[Dict[str, Any]]] = None
 
-# Supabase internal schemas to ignore
+# Supabase internal schemas and internal memory tables to ignore in business text-to-SQL schema prompt
 EXCLUDED_SCHEMAS = {
     "auth", "storage", "graphql", "realtime", "vault",
     "pg_catalog", "information_schema", "supabase_functions",
     "pg_toast", "extensions"
 }
+EXCLUDED_TABLES = {"conversations", "messages", "conversation_memories"}
+
+
+def init_memory_tables() -> None:
+    """Auto-creates persistent Long-Term Memory (LTM) tables in Supabase PostgreSQL."""
+    create_conversations_sql = """
+    CREATE TABLE IF NOT EXISTS public.conversations (
+        id VARCHAR(64) PRIMARY KEY,
+        title VARCHAR(255) NOT NULL DEFAULT 'New Conversation',
+        summary TEXT DEFAULT NULL,
+        token_count INT DEFAULT 0,
+        message_count INT DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    """
+    create_messages_sql = """
+    CREATE TABLE IF NOT EXISTS public.messages (
+        id VARCHAR(64) PRIMARY KEY,
+        conversation_id VARCHAR(64) NOT NULL REFERENCES public.conversations(id) ON DELETE CASCADE,
+        role VARCHAR(16) NOT NULL,
+        content TEXT NOT NULL,
+        sql TEXT DEFAULT NULL,
+        data_preview JSONB DEFAULT NULL,
+        metrics JSONB DEFAULT NULL,
+        chart_config JSONB DEFAULT NULL,
+        thought_trace JSONB DEFAULT NULL,
+        token_count INT DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    """
+    create_index_sql = "CREATE INDEX IF NOT EXISTS idx_messages_conv_id ON public.messages(conversation_id, created_at ASC);"
+
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(create_conversations_sql))
+            conn.execute(text(create_messages_sql))
+            conn.execute(text(create_index_sql))
+        logger.info("Supabase Long-Term Memory tables verified/initialized.")
+    except Exception as e:
+        logger.warning(f"Could not auto-initialize memory tables in Supabase: {e}")
 
 
 def warm_database_pool() -> None:
-    """Pre-warms the database TCP/SSL connection pool on server boot to avoid cold-start delays."""
+    """Pre-warms the database TCP/SSL connection pool and initializes memory tables on server boot."""
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1;"))
         logger.info("Supabase database connection pool pre-warmed successfully.")
+        init_memory_tables()
     except Exception as e:
         logger.warning(f"Database pool pre-warming check failed: {e}")
+
 
 
 def validate_read_only_sql(sql_query: str) -> str:
@@ -109,7 +152,7 @@ def get_database_schema(force_refresh: bool = False) -> str:
             tables: Dict[str, List[str]] = {}
             for row in columns_result:
                 tbl = row.table_name
-                if tbl in EXCLUDED_SCHEMAS:
+                if tbl in EXCLUDED_SCHEMAS or tbl in EXCLUDED_TABLES:
                     continue
                 if tbl not in tables:
                     tables[tbl] = []
