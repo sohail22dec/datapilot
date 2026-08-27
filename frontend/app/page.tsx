@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Sidebar } from "../components/sidebar/Sidebar";
 import { ChatWorkspace } from "../components/workspace/ChatWorkspace";
-import { Conversation, Message } from "../types/chat";
+import { Conversation, Message, QueryDataRow, ChartConfig } from "../types/chat";
 
 const formatCurrentTime = (): string => {
   const now = new Date();
@@ -23,6 +23,24 @@ const INITIAL_CONVERSATIONS: Conversation[] = [
     messages: [],
   },
 ];
+
+interface ApiConversation {
+  id: string;
+  title: string;
+  updated_at?: string;
+}
+
+interface ApiMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  timestamp?: string;
+  sql?: string;
+  data?: QueryDataRow[];
+  metrics?: Record<string, unknown>;
+  chart_config?: ChartConfig | null;
+  thought_trace?: string[];
+}
 
 export default function Home() {
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
@@ -44,7 +62,7 @@ export default function Home() {
         if (!res.ok) return;
         const data = await res.json();
         if (data.conversations && data.conversations.length > 0) {
-          const loaded: Conversation[] = data.conversations.map((c: any) => ({
+          const loaded: Conversation[] = data.conversations.map((c: ApiConversation) => ({
             id: c.id,
             title: c.title,
             timestamp: c.updated_at ? new Date(c.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : formatCurrentTime(),
@@ -63,7 +81,7 @@ export default function Home() {
                   conv.id === loaded[0].id
                     ? {
                         ...conv,
-                        messages: firstDetail.messages.map((m: any) => ({
+                        messages: firstDetail.messages.map((m: ApiMessage) => ({
                           id: m.id,
                           role: m.role,
                           content: m.content,
@@ -122,7 +140,7 @@ export default function Home() {
                 c.id === id
                   ? {
                       ...c,
-                      messages: detail.messages.map((m: any) => ({
+                      messages: detail.messages.map((m: ApiMessage) => ({
                         id: m.id,
                         role: m.role,
                         content: m.content,
