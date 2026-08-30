@@ -28,10 +28,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Enable CORS for frontend integration
+origins = [
+    "http://localhost:3000",
+    "https://datapilot.duckdns.org",
+    "http://datapilot.duckdns.org",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

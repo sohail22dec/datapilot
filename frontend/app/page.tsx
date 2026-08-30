@@ -52,7 +52,7 @@ export default function Home() {
   );
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
-  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+  const backendUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 
   // Initial load: Fetch persistent conversations from backend Supabase
   useEffect(() => {
@@ -227,7 +227,7 @@ export default function Home() {
 
     setIsLoading(true);
 
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 
     try {
       const response = await fetch(`${backendUrl}/api/chat/stream`, {
