@@ -34,13 +34,13 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: https://datapilot.duckdns.org
+        - NEXT_PUBLIC_API_URL=https://datapilot.duckdns.org
     container_name: datapilot-frontend
     restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL: https://datapilot.duckdns.org
+      - NEXT_PUBLIC_API_URL=https://datapilot.duckdns.org
       - PORT=3000
       - HOSTNAME=0.0.0.0
     depends_on:
