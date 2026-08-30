@@ -42,6 +42,20 @@ interface ApiMessage {
   thought_trace?: string[];
 }
 
+function getBackendUrl(): string {
+  const envUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL;
+  if (envUrl && !envUrl.includes("localhost") && !envUrl.includes("127.0.0.1")) {
+    return envUrl;
+  }
+  if (typeof window !== "undefined") {
+    // In production on a domain (e.g. datapilot.duckdns.org), use relative path so Nginx routes /api/
+    if (window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1") {
+      return "";
+    }
+  }
+  return envUrl || "http://localhost:8000";
+}
+
 export default function Home() {
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
   const [conversations, setConversations] = useState<Conversation[]>(
@@ -52,7 +66,7 @@ export default function Home() {
   );
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
-  const backendUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+  const backendUrl = getBackendUrl();
 
   // Initial load: Fetch persistent conversations from backend Supabase
   useEffect(() => {
@@ -227,7 +241,7 @@ export default function Home() {
 
     setIsLoading(true);
 
-    const backendUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+    const backendUrl = getBackendUrl();
 
     try {
       const response = await fetch(`${backendUrl}/api/chat/stream`, {
@@ -371,7 +385,7 @@ export default function Home() {
                     ? {
                         ...m,
                         content:
-                          `I encountered an issue connecting to the backend service. Please check your backend connection at ${backendUrl}.`,
+                          `I encountered an issue connecting to the backend service. Please check your backend connection at ${backendUrl || (typeof window !== "undefined" ? window.location.origin : "http://localhost:8000")}.`,
                         isStreaming: false,
                       }
                     : m
